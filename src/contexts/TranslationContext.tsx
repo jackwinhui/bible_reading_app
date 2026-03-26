@@ -11,7 +11,7 @@ const TranslationContext = createContext<TranslationContextType | undefined>(und
 export function TranslationProvider({ children }: { children: ReactNode }) {
   const [translation, setTranslation] = useState<Translation>(() => {
     const stored = localStorage.getItem('bible-app-translation');
-    return (stored === 'ESV' || stored === 'NASB1995') ? stored : 'ESV';
+    return (stored === 'ESV' || stored === 'NASB1995' || stored === 'CSB' || stored === 'NLT') ? stored : 'ESV';
   });
 
   const handleSet = (t: Translation) => {

@@ -8,8 +8,17 @@ export default function Header() {
   const location = useLocation();
   const { translation, setTranslation } = useTranslation();
 
+  // Track the last reading location so the Read tab returns to it
+  const lastReadPath = (() => {
+    if (location.pathname.startsWith('/read/')) {
+      localStorage.setItem('bible-app-last-read', location.pathname);
+      return location.pathname;
+    }
+    return localStorage.getItem('bible-app-last-read') || '/';
+  })();
+
   const navItems = [
-    { to: '/', icon: Book, label: 'Read' },
+    { to: lastReadPath, icon: Book, label: 'Read' },
     { to: '/bookmarks', icon: Bookmark, label: 'Bookmarks' },
     { to: '/annotations', icon: StickyNote, label: 'Notes' },
     { to: '/memory', icon: Brain, label: 'Memory' },
@@ -27,7 +36,9 @@ export default function Header() {
 
         <nav className="flex items-center gap-1">
           {navItems.map(({ to, icon: Icon, label }) => {
-            const isActive = location.pathname === to || (to === '/' && location.pathname.startsWith('/read'));
+            const isActive = location.pathname === to || 
+              (to !== '/bookmarks' && to !== '/annotations' && to !== '/memory' && 
+               (location.pathname === '/' || location.pathname.startsWith('/read')));
             return (
               <Link
                 key={to}
@@ -47,7 +58,7 @@ export default function Header() {
 
         <div className="flex items-center gap-2">
           <div className="flex bg-surface-100 dark:bg-surface-800 rounded-lg p-0.5">
-            {(['ESV', 'NASB1995'] as Translation[]).map((t) => (
+            {(['ESV', 'NASB1995', 'CSB', 'NLT'] as Translation[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTranslation(t)}

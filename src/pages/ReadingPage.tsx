@@ -133,34 +133,84 @@ export default function ReadingPage() {
           </button>
         </div>
       ) : (
-        <div className="space-y-0 leading-relaxed text-[17px]">
+        <div className="leading-relaxed text-[17px]">
           {verses.map((verse) => {
             const bookmarked = isBookmarked(decodedName, chapterNum, verse.verse);
             const annotated = hasAnnotation(decodedName, chapterNum, verse.verse);
             const annotation = annotated ? getAnnotation(decodedName, chapterNum, verse.verse) : null;
+            const isPoetry = verse.text.includes('\n');
 
             return (
-              <span
-                key={verse.verse}
-                onClick={(e) => handleVerseClick(verse, e)}
-                className={`inline cursor-pointer rounded px-0.5 transition-colors hover:bg-primary-50 dark:hover:bg-primary-950 ${
-                  bookmarked ? 'bg-primary-50 dark:bg-primary-950 border-l-2 border-primary-400 pl-1' : ''
-                } ${annotated ? 'underline decoration-amber-400 decoration-2 underline-offset-4' : ''} ${
-                  selectedVerse?.verse === verse.verse ? 'verse-highlight' : ''
-                }`}
-              >
-                <sup className="text-xs font-semibold text-primary-400 dark:text-primary-500 mr-0.5 select-none">
-                  {verse.verse}
-                </sup>
-                {verse.text}{' '}
-                {annotation && (
-                  <span className="inline-block relative group">
-                    <span className="text-amber-500 text-xs cursor-help">📝</span>
-                    <span className="absolute bottom-full left-0 mb-1 w-48 p-2 bg-surface-800 dark:bg-surface-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-40 shadow-lg">
-                      {annotation.note}
-                    </span>
+              <span key={verse.verse}>
+                {/* Section heading */}
+                {verse.heading && (
+                  <span className="block mt-8 mb-3">
+                    {verse.heading.split('\n').map((h, i) => (
+                      <span
+                        key={i}
+                        className={`block ${
+                          i === 0
+                            ? 'text-lg font-semibold text-surface-800 dark:text-surface-200'
+                            : 'text-sm italic text-surface-500 dark:text-surface-400 mt-1'
+                        }`}
+                      >
+                        {h}
+                      </span>
+                    ))}
                   </span>
                 )}
+
+                {/* Stanza break (extra vertical space between verse groups) */}
+                {verse.stanzaBreak && !verse.heading && (
+                  <span className="block mt-5" />
+                )}
+
+                {/* Paragraph break (for prose) */}
+                {verse.paragraphBreak && !verse.heading && !verse.stanzaBreak && (
+                  <span className="block mt-4" />
+                )}
+
+                <span
+                  onClick={(e) => handleVerseClick(verse, e)}
+                  className={`${isPoetry ? 'block mt-1' : 'inline'} cursor-pointer rounded px-0.5 transition-colors hover:bg-primary-50 dark:hover:bg-primary-950 ${
+                    bookmarked ? 'bg-primary-50 dark:bg-primary-950 border-l-2 border-primary-400 pl-1' : ''
+                  } ${annotated ? 'underline decoration-amber-400 decoration-2 underline-offset-4' : ''} ${
+                    selectedVerse?.verse === verse.verse ? 'verse-highlight' : ''
+                  }`}
+                >
+                  {isPoetry ? (
+                    verse.text.split('\n').filter((l) => l.trim()).map((line, i) => {
+                      const stripped = line.replace(/^\s+/, '');
+                      const leadingSpaces = line.length - stripped.length;
+                      const indent = leadingSpaces >= 8 ? 'pl-8' : leadingSpaces >= 4 ? 'pl-4' : '';
+                      return (
+                        <span key={i} className={i === 0 ? '' : `block ${indent}`}>
+                          {i === 0 && (
+                            <sup className="text-xs font-semibold text-primary-400 dark:text-primary-500 mr-0.5 select-none">
+                              {verse.verse}
+                            </sup>
+                          )}
+                          {stripped}
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <sup className="text-xs font-semibold text-primary-400 dark:text-primary-500 mr-0.5 select-none">
+                        {verse.verse}
+                      </sup>
+                      {verse.text}
+                    </>
+                  )}{' '}
+                  {annotation && (
+                    <span className="inline-block relative group">
+                      <span className="text-amber-500 text-xs cursor-help">📝</span>
+                      <span className="absolute bottom-full left-0 mb-1 w-48 p-2 bg-surface-800 dark:bg-surface-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-40 shadow-lg">
+                        {annotation.note}
+                      </span>
+                    </span>
+                  )}
+                </span>
               </span>
             );
           })}

@@ -1,41 +1,62 @@
 import type { Verse, Translation } from '../types';
-import { books } from '../data/books';
 
-const API_KEY = import.meta.env.VITE_ESV_API_KEY || '';
+const ESV_API_KEY = import.meta.env.VITE_ESV_API_KEY || '';
 const ESV_BASE = 'https://api.esv.org/v3/passage/text/';
 
-// Bible book name -> API.Bible book ID mapping for NASB
-// Using api.scripture.api.bible for NASB1995
 const SCRIPTURE_API_KEY = import.meta.env.VITE_SCRIPTURE_API_KEY || '';
-const SCRIPTURE_BASE = 'https://api.scripture.api.bible/v1';
-const NASB_BIBLE_ID = '592420522e16049f-01';
+const SCRIPTURE_BASE = 'https://rest.api.bible/v1';
 
-function getBookAbbrevForApi(bookName: string): string {
-  const book = books.find((b) => b.name === bookName);
-  return book?.abbrev || bookName;
-}
+// Bible IDs on api.bible — update these if needed
+const BIBLE_IDS: Record<string, string> = {
+  NASB1995: 'b8ee27bcd1cae43a-01',
+  CSB: 'a556c5305ee15c3f-01',
+  NLT: 'd6e14a625393b4da-01',
+};
+
+// USFM book IDs used by API.Bible (keyed by our book name)
+const USFM_BOOK_IDS: Record<string, string> = {
+  'Genesis': 'GEN', 'Exodus': 'EXO', 'Leviticus': 'LEV', 'Numbers': 'NUM',
+  'Deuteronomy': 'DEU', 'Joshua': 'JOS', 'Judges': 'JDG', 'Ruth': 'RUT',
+  '1 Samuel': '1SA', '2 Samuel': '2SA', '1 Kings': '1KI', '2 Kings': '2KI',
+  '1 Chronicles': '1CH', '2 Chronicles': '2CH', 'Ezra': 'EZR', 'Nehemiah': 'NEH',
+  'Esther': 'EST', 'Job': 'JOB', 'Psalms': 'PSA', 'Proverbs': 'PRO',
+  'Ecclesiastes': 'ECC', 'Song of Solomon': 'SNG', 'Isaiah': 'ISA', 'Jeremiah': 'JER',
+  'Lamentations': 'LAM', 'Ezekiel': 'EZK', 'Daniel': 'DAN', 'Hosea': 'HOS',
+  'Joel': 'JOL', 'Amos': 'AMO', 'Obadiah': 'OBA', 'Jonah': 'JON',
+  'Micah': 'MIC', 'Nahum': 'NAM', 'Habakkuk': 'HAB', 'Zephaniah': 'ZEP',
+  'Haggai': 'HAG', 'Zechariah': 'ZEC', 'Malachi': 'MAL',
+  'Matthew': 'MAT', 'Mark': 'MRK', 'Luke': 'LUK', 'John': 'JHN',
+  'Acts': 'ACT', 'Romans': 'ROM', '1 Corinthians': '1CO', '2 Corinthians': '2CO',
+  'Galatians': 'GAL', 'Ephesians': 'EPH', 'Philippians': 'PHP', 'Colossians': 'COL',
+  '1 Thessalonians': '1TH', '2 Thessalonians': '2TH', '1 Timothy': '1TI', '2 Timothy': '2TI',
+  'Titus': 'TIT', 'Philemon': 'PHM', 'Hebrews': 'HEB', 'James': 'JAS',
+  '1 Peter': '1PE', '2 Peter': '2PE', '1 John': '1JN', '2 John': '2JN',
+  '3 John': '3JN', 'Jude': 'JUD', 'Revelation': 'REV',
+};
+
+// --- ESV API ---
 
 async function fetchESV(bookName: string, chapter: number): Promise<Verse[]> {
-  if (!API_KEY) {
+  if (!ESV_API_KEY) {
     throw new Error('ESV API key not configured. Add VITE_ESV_API_KEY to your .env file.');
   }
 
   const query = `${bookName} ${chapter}`;
   const params = new URLSearchParams({
     q: query,
-    'include-headings': 'false',
+    'include-headings': 'true',
     'include-footnotes': 'false',
     'include-verse-numbers': 'true',
     'include-short-copyright': 'false',
     'include-passage-references': 'false',
-    'indent-paragraphs': '0',
-    'indent-poetry': 'false',
+    'indent-paragraphs': '2',
+    'indent-poetry': 'true',
     'indent-declares': '0',
     'indent-psalm-doxology': '0',
   });
 
   const response = await fetch(`${ESV_BASE}?${params}`, {
-    headers: { Authorization: `Token ${API_KEY}` },
+    headers: { Authorization: `Token ${ESV_API_KEY}` },
   });
 
   if (!response.ok) {
@@ -50,69 +71,215 @@ async function fetchESV(bookName: string, chapter: number): Promise<Verse[]> {
 
 function parseEsvPassage(text: string, bookName: string, chapter: number): Verse[] {
   const verses: Verse[] = [];
-  // ESV API returns text with [N] markers for verse numbers
-  const parts = text.split(/\[(\d+)\]\s*/);
+
+  // Split on verse markers [N] — keep the number as a capture group
+  const parts = text.split(/\[(\d+)\]/);
+
+  // Extract headings from preamble (before first verse)
+  let pendingHeadings: string[] = [];
+  let pendingParagraphBreak = false;
+
+  if (parts[0]) {
+    const preamble = parts[0].trim();
+    if (preamble) {
+      pendingHeadings = preamble
+        .split(/\n\n+/)
+        .map((h) => h.trim())
+        .filter((h) => h.length > 0);
+    }
+  }
 
   for (let i = 1; i < parts.length; i += 2) {
     const verseNum = parseInt(parts[i], 10);
-    const verseText = (parts[i + 1] || '').trim();
-    if (verseText) {
-      verses.push({
-        book: bookName,
-        chapter,
-        verse: verseNum,
-        text: verseText,
-      });
+    let rawText = parts[i + 1] || '';
+
+    // Detect stanza break: text ending with multiple blank lines
+    const stanzaBreak = /\n\s*\n\s*\n/.test(rawText);
+
+    // Detect paragraph break at end (prose: \n\n before next verse)
+    const endsWithParagraphBreak = /\n\n\s*$/.test(rawText);
+
+    // Check for a heading embedded at the end of this verse's text
+    const headingAtEndMatch = rawText.match(/\n\n+((?:[A-Z][^\n]*\n?)+)\s*$/);
+    if (headingAtEndMatch) {
+      const headingBlock = headingAtEndMatch[1].trim();
+      const headings = headingBlock
+        .split(/\n\n+/)
+        .map((h) => h.trim())
+        .filter((h) => h.length > 0);
+      rawText = rawText.slice(0, headingAtEndMatch.index);
+      pendingHeadings = headings;
+    }
+
+    // Clean up the verse text while preserving poetry line structure
+    const lines = rawText.split('\n');
+    const cleanedLines: string[] = [];
+    for (const line of lines) {
+      if (line.trim() === '') continue;
+      cleanedLines.push(line);
+    }
+
+    const verseText = cleanedLines.join('\n').trim();
+    if (!verseText) continue;
+
+    const heading = pendingHeadings.length > 0 ? pendingHeadings.join('\n') : undefined;
+    const paragraphBreak = pendingParagraphBreak;
+    pendingHeadings = [];
+    pendingParagraphBreak = false;
+
+    verses.push({
+      book: bookName,
+      chapter,
+      verse: verseNum,
+      text: verseText,
+      ...(heading ? { heading } : {}),
+      ...(stanzaBreak ? { stanzaBreak: true } : {}),
+      ...(paragraphBreak && !heading && !stanzaBreak ? { paragraphBreak: true } : {}),
+    });
+
+    // Queue paragraph break for next verse if this one ends with \n\n
+    if (endsWithParagraphBreak && !headingAtEndMatch) {
+      pendingParagraphBreak = true;
     }
   }
 
   return verses;
 }
 
-async function fetchNASB(bookName: string, chapter: number): Promise<Verse[]> {
+// --- API.Bible (NASB1995, CSB, NLT) ---
+
+async function fetchFromApiBible(
+  bookName: string,
+  chapter: number,
+  translationKey: string
+): Promise<Verse[]> {
   if (!SCRIPTURE_API_KEY) {
     throw new Error(
       'Scripture API key not configured. Add VITE_SCRIPTURE_API_KEY to your .env file. Get a free key at https://scripture.api.bible'
     );
   }
 
-  const abbrev = getBookAbbrevForApi(bookName);
-  const chapterId = `${abbrev}.${chapter}`;
+  const bibleId = BIBLE_IDS[translationKey];
+  if (!bibleId) {
+    throw new Error(`Unknown translation: ${translationKey}`);
+  }
 
+  const usfmId = USFM_BOOK_IDS[bookName];
+  if (!usfmId) {
+    throw new Error(`Unknown book: ${bookName}`);
+  }
+  const chapterId = `${usfmId}.${chapter}`;
+
+  // Fetch full chapter HTML in one request (includes headings + verse numbers)
   const response = await fetch(
-    `${SCRIPTURE_BASE}/bibles/${NASB_BIBLE_ID}/chapters/${chapterId}/verses`,
-    {
-      headers: { 'api-key': SCRIPTURE_API_KEY },
-    }
+    `${SCRIPTURE_BASE}/bibles/${bibleId}/chapters/${chapterId}?content-type=html&include-notes=false&include-titles=true&include-chapter-numbers=false&include-verse-numbers=true`,
+    { headers: { 'api-key': SCRIPTURE_API_KEY } }
   );
 
   if (!response.ok) {
-    throw new Error(`Scripture API error: ${response.status}`);
+    throw new Error(`API.Bible error: ${response.status}`);
   }
 
   const data = await response.json();
-  const versesData = data.data || [];
+  const html: string = data.data?.content || '';
 
+  return parseApiBibleHtml(html, bookName, chapter);
+}
+
+function parseApiBibleHtml(html: string, bookName: string, chapter: number): Verse[] {
   const verses: Verse[] = [];
-  for (const v of versesData) {
-    const verseResponse = await fetch(
-      `${SCRIPTURE_BASE}/bibles/${NASB_BIBLE_ID}/verses/${v.id}?content-type=text&include-notes=false&include-titles=false`,
-      { headers: { 'api-key': SCRIPTURE_API_KEY } }
-    );
-    if (verseResponse.ok) {
-      const verseData = await verseResponse.json();
-      const num = parseInt(v.id.split('.').pop() || '0', 10);
-      verses.push({
-        book: bookName,
-        chapter,
-        verse: num,
-        text: (verseData.data?.content || '').trim(),
-      });
+
+  // Step 1: Extract section headings and mark their positions
+  // Headings use <p class="s">, <p class="s1">, <h1>-<h4>, etc.
+  const headingPositions: { pos: number; text: string }[] = [];
+  const headingPattern = /<(?:h[1-4]|p)\b[^>]*class="s\d?"[^>]*>([\s\S]*?)<\/(?:h[1-4]|p)>/gi;
+  let hm;
+  while ((hm = headingPattern.exec(html)) !== null) {
+    headingPositions.push({ pos: hm.index, text: stripHtmlTags(hm[1]).trim() });
+  }
+  // Also match actual h1-h4 tags (without class="s")
+  const hTagPattern = /<(h[1-4])\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  while ((hm = hTagPattern.exec(html)) !== null) {
+    const text = stripHtmlTags(hm[2]).trim();
+    if (text && !headingPositions.some((h) => h.pos === hm!.index)) {
+      headingPositions.push({ pos: hm.index, text });
     }
+  }
+
+  // Step 2: Find all verse markers and their positions
+  const verseMarkers: { pos: number; num: number }[] = [];
+  const markerPattern = /<span[^>]*data-number="(\d+)"[^>]*class="v"[^>]*>\d+<\/span>/gi;
+  let vm;
+  while ((vm = markerPattern.exec(html)) !== null) {
+    verseMarkers.push({ pos: vm.index + vm[0].length, num: parseInt(vm[1], 10) });
+  }
+
+  // Step 3: Find all paragraph break positions (<p> tags with class "p" or similar)
+  const paragraphBreaks = new Set<number>();
+  const pTagPattern = /<p\b[^>]*class="p"[^>]*>/gi;
+  let pm;
+  while ((pm = pTagPattern.exec(html)) !== null) {
+    paragraphBreaks.add(pm.index);
+  }
+
+  // Step 4: For each verse, extract text from its marker position to the next verse marker
+  for (let i = 0; i < verseMarkers.length; i++) {
+    const marker = verseMarkers[i];
+    const nextMarker = verseMarkers[i + 1];
+    const startPos = marker.pos;
+    const endPos = nextMarker ? nextMarker.pos : html.length;
+
+    // Find the raw HTML for this verse — go back to find the full span end,
+    // then take everything until the next verse span
+    const rawSegment = html.slice(startPos, endPos);
+
+    // Strip the next verse's span tag if it's included
+    const nextSpanIdx = rawSegment.search(/<span[^>]*data-number="/i);
+    const verseHtml = nextSpanIdx >= 0 ? rawSegment.slice(0, nextSpanIdx) : rawSegment;
+
+    // Strip HTML tags, clean whitespace
+    let verseText = stripHtmlTags(verseHtml).replace(/\s+/g, ' ').trim();
+    if (!verseText) continue;
+
+    // Check for heading before this verse
+    const heading = headingPositions.find(
+      (h) => h.pos < startPos && (i === 0 || h.pos > verseMarkers[i - 1].pos)
+    );
+
+    // Check for paragraph break between previous verse and this one
+    let hasParagraphBreak = false;
+    if (i > 0) {
+      const prevEnd = verseMarkers[i - 1].pos;
+      const segmentBetween = html.slice(prevEnd, startPos);
+      hasParagraphBreak = /<\/p>\s*<p\b/i.test(segmentBetween);
+    }
+
+    verses.push({
+      book: bookName,
+      chapter,
+      verse: marker.num,
+      text: verseText,
+      ...(heading ? { heading: heading.text } : {}),
+      ...(hasParagraphBreak ? { paragraphBreak: true } : {}),
+    });
   }
 
   return verses;
 }
+
+function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+// --- Cache & public API ---
 
 const cache = new Map<string, Verse[]>();
 
@@ -130,7 +297,7 @@ export async function fetchChapter(
   if (translation === 'ESV') {
     verses = await fetchESV(bookName, chapter);
   } else {
-    verses = await fetchNASB(bookName, chapter);
+    verses = await fetchFromApiBible(bookName, chapter, translation);
   }
 
   cache.set(cacheKey, verses);

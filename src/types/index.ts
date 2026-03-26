@@ -11,6 +11,9 @@ export interface Verse {
   chapter: number;
   verse: number;
   text: string;
+  heading?: string;
+  paragraphBreak?: boolean;
+  stanzaBreak?: boolean;
 }
 
 export interface Bookmark {
@@ -51,6 +54,6 @@ export interface MemoryProgress {
   lastAttempt: string | null;
 }
 
-export type Translation = 'ESV' | 'NASB1995';
+export type Translation = 'ESV' | 'NASB1995' | 'CSB' | 'NLT';
 
 export type Theme = 'light' | 'dark';
