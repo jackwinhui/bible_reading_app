@@ -1,10 +1,24 @@
 import type { Verse, Translation } from '../types';
 
-const ESV_API_KEY = import.meta.env.VITE_ESV_API_KEY || '';
 const ESV_BASE = 'https://api.esv.org/v3/passage/text/';
-
-const SCRIPTURE_API_KEY = import.meta.env.VITE_SCRIPTURE_API_KEY || '';
 const SCRIPTURE_BASE = 'https://rest.api.bible/v1';
+
+function getApiKeys(): { esvApiKey: string; scriptureApiKey: string } {
+  try {
+    const stored = localStorage.getItem('bible-app-api-keys');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return {
+        esvApiKey: parsed.esvApiKey || import.meta.env.VITE_ESV_API_KEY || '',
+        scriptureApiKey: parsed.scriptureApiKey || import.meta.env.VITE_SCRIPTURE_API_KEY || '',
+      };
+    }
+  } catch { /* ignore */ }
+  return {
+    esvApiKey: import.meta.env.VITE_ESV_API_KEY || '',
+    scriptureApiKey: import.meta.env.VITE_SCRIPTURE_API_KEY || '',
+  };
+}
 
 // Bible IDs on api.bible — update these if needed
 const BIBLE_IDS: Record<string, string> = {
@@ -37,8 +51,9 @@ const USFM_BOOK_IDS: Record<string, string> = {
 // --- ESV API ---
 
 async function fetchESV(bookName: string, chapter: number): Promise<Verse[]> {
-  if (!ESV_API_KEY) {
-    throw new Error('ESV API key not configured. Add VITE_ESV_API_KEY to your .env file.');
+  const { esvApiKey } = getApiKeys();
+  if (!esvApiKey) {
+    throw new Error('ESV API key not configured. Go to Settings to add your key.');
   }
 
   const query = `${bookName} ${chapter}`;
@@ -56,7 +71,7 @@ async function fetchESV(bookName: string, chapter: number): Promise<Verse[]> {
   });
 
   const response = await fetch(`${ESV_BASE}?${params}`, {
-    headers: { Authorization: `Token ${ESV_API_KEY}` },
+    headers: { Authorization: `Token ${esvApiKey}` },
   });
 
   if (!response.ok) {
@@ -153,9 +168,10 @@ async function fetchFromApiBible(
   chapter: number,
   translationKey: string
 ): Promise<Verse[]> {
-  if (!SCRIPTURE_API_KEY) {
+  const { scriptureApiKey } = getApiKeys();
+  if (!scriptureApiKey) {
     throw new Error(
-      'Scripture API key not configured. Add VITE_SCRIPTURE_API_KEY to your .env file. Get a free key at https://scripture.api.bible'
+      'Scripture API key not configured. Go to Settings to add your key.'
     );
   }
 
@@ -173,7 +189,7 @@ async function fetchFromApiBible(
   // Fetch full chapter HTML in one request (includes headings + verse numbers)
   const response = await fetch(
     `${SCRIPTURE_BASE}/bibles/${bibleId}/chapters/${chapterId}?content-type=html&include-notes=false&include-titles=true&include-chapter-numbers=false&include-verse-numbers=true`,
-    { headers: { 'api-key': SCRIPTURE_API_KEY } }
+    { headers: { 'api-key': scriptureApiKey } }
   );
 
   if (!response.ok) {
@@ -281,6 +297,50 @@ function stripHtmlTags(html: string): string {
 
 // --- Cache & public API ---
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const bundledData: Record<string, any> = {};
+
+async function loadBundledTranslation(translation: string): Promise<boolean> {
+  if (bundledData[translation]) return true;
+  try {
+    const modules: Record<string, () => Promise<unknown>> = {
+      ESV: () => import('../data/bible-text-ESV.json').catch(() => null),
+      NASB1995: () => import('../data/bible-text-NASB1995.json').catch(() => null),
+      CSB: () => import('../data/bible-text-CSB.json').catch(() => null),
+      NLT: () => import('../data/bible-text-NLT.json').catch(() => null),
+    };
+    const loader = modules[translation];
+    if (!loader) return false;
+    const mod = await loader() as Record<string, unknown> | null;
+    if (!mod) return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    bundledData[translation] = (mod as any).default || mod;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getBundledChapter(bookName: string, chapter: number, translation: string): Verse[] | null {
+  const translationData = bundledData[translation];
+  if (!translationData) return null;
+  const bookData = translationData[bookName];
+  if (!bookData) return null;
+  const chapterData = bookData[String(chapter)];
+  if (!chapterData || chapterData.length === 0) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return chapterData.map((v: any) => ({
+    book: bookName,
+    chapter,
+    verse: v.verse,
+    text: v.text,
+    ...(v.heading ? { heading: v.heading } : {}),
+    ...(v.paragraphBreak ? { paragraphBreak: true } : {}),
+    ...(v.stanzaBreak ? { stanzaBreak: true } : {}),
+  }));
+}
+
 const cache = new Map<string, Verse[]>();
 
 export async function fetchChapter(
@@ -291,6 +351,15 @@ export async function fetchChapter(
   const cacheKey = `${translation}:${bookName}:${chapter}`;
   if (cache.has(cacheKey)) {
     return cache.get(cacheKey)!;
+  }
+
+  const hasBundled = await loadBundledTranslation(translation);
+  if (hasBundled) {
+    const bundled = getBundledChapter(bookName, chapter, translation);
+    if (bundled) {
+      cache.set(cacheKey, bundled);
+      return bundled;
+    }
   }
 
   let verses: Verse[];

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Book, Bookmark, StickyNote, Brain } from 'lucide-react';
+import { Book, Bookmark, StickyNote, Brain, Settings } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import { useTranslation } from '../contexts/TranslationContext';
 import type { Translation } from '../types';
@@ -22,6 +22,7 @@ export default function Header() {
     { to: '/bookmarks', icon: Bookmark, label: 'Bookmarks' },
     { to: '/annotations', icon: StickyNote, label: 'Notes' },
     { to: '/memory', icon: Brain, label: 'Memory' },
+    { to: '/settings', icon: Settings, label: 'Settings' },
   ];
 
   return (

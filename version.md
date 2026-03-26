@@ -1,5 +1,21 @@
 # Bible App — Version History
 
+## v3.0.0
+
+### New Features
+- **Settings page** — Users can enter their own API keys (stored locally, never shared)
+- **Desktop app** — Electron packaging for Mac (.dmg), Windows (.exe), and Linux (.AppImage)
+- **Custom app icon** — Logo displayed in Dock, taskbar, and window title
+
+### Bug Fixes
+- **Fixed Electron CommonJS error** — Renamed `main.js` to `main.cjs` to avoid ES module conflict
+
+### Infrastructure
+- Switched from BrowserRouter to HashRouter for Electron compatibility
+- Added `base: './'` to Vite config for file:// protocol support
+
+---
+
 ## v2.0.0
 
 ### New Features
@@ -10,13 +26,12 @@
 - **Fixed API.Bible URL** — Changed from `scripture.api.bible` to `rest.api.bible`
 - **Fixed Bible IDs** — Corrected NASB1995, CSB, and NLT Bible IDs on API.Bible
 - **Fixed USFM book mapping** — API.Bible requires USFM book codes (e.g., `PSA`, `1JN`); was sending incorrect abbreviations causing 400 errors
-- **Fixed missing `.env`** — App now ships with `.env.example` and clear setup instructions
 - **Fixed verse text cut off across paragraphs** — Verses spanning multiple `<p>` tags in API.Bible HTML (e.g., Matthew 1:6 NASB1995) are now fully captured
-- **Fixed poetry formatting** — Psalm poetry now renders with proper line breaks and indented continuation lines matching BibleGateway layout
-- **Fixed verse number placement** — Verse numbers now appear inline with the first line of text in poetry, not on a separate line
+- **Fixed poetry formatting** — Psalm poetry now renders with proper line breaks and indented continuation lines
+- **Fixed verse number placement** — Verse numbers appear inline with the first line of text in poetry, not on a separate line
 - **Fixed ESV section headings** — Headings and subtitles (e.g., Psalm superscriptions) are extracted and rendered
-- **Fixed ESV prose paragraph breaks** — Paragraph spacing now appears between verse groups in prose passages (e.g., Genesis 1)
-- **Fixed stanza breaks** — Poetry stanza breaks (e.g., between Psalm 51:2–3) now show proper vertical spacing
+- **Fixed ESV prose paragraph breaks** — Paragraph spacing now appears between verse groups in prose passages
+- **Fixed stanza breaks** — Poetry stanza breaks now show proper vertical spacing
 - **Fixed API.Bible section headings** — `<p class="s">` heading tags are now correctly parsed
 
 ---
