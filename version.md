@@ -1,5 +1,16 @@
 # Bible App — Version History
 
+## v3.0.1
+
+### Bug Fixes
+- **Fixed incomplete ESV chapters** — Re-fetched all ESV chapters one-by-one to work around the ESV API's "500 verses or half a book" per-query limit. Previously, 154 chapters across most books were missing or truncated (e.g., 2 John only loaded verse 1; Romans 9–16, Hebrews 10–13, Mark 10–16, Luke 11–24, John 11–15, and Revelation 13–22 were missing entirely).
+- **Fixed single-chapter book queries** — Obadiah, Philemon, 2 John, 3 John, and Jude now load correctly. The ESV API interprets `Obadiah 1` as "verse 1" rather than "chapter 1," so the fetch script now queries single-chapter books by name only.
+
+### Infrastructure
+- Added `scripts/refetch-esv.mjs` that fetches one chapter at a time with rate-limit/retry handling, replacing the previous batched approach that silently truncated.
+
+---
+
 ## v3.0.0
 
 ### New Features
