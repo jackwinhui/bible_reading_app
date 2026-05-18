@@ -75,6 +75,7 @@ export function AnnotationProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAnnotations() {
   const ctx = useContext(AnnotationContext);
   if (!ctx) throw new Error('useAnnotations must be used within AnnotationProvider');

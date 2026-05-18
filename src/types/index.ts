@@ -57,3 +57,29 @@ export interface MemoryProgress {
 export type Translation = 'ESV' | 'NASB1995' | 'CSB' | 'NLT';
 
 export type Theme = 'light' | 'dark';
+
+// --- Journal ---
+
+export interface VerseRef {
+  book: string;
+  chapter: number;
+  verseStart: number;
+  verseEnd?: number;
+  translation: Translation;
+}
+
+export type JournalBlock =
+  | { id: string; type: 'text'; content: string }
+  | { id: string; type: 'verse'; ref: VerseRef; snapshot: string };
+
+export interface JournalEntry {
+  id: string;
+  date: string;          // YYYY-MM-DD
+  createdAt: string;     // ISO
+  updatedAt: string;     // ISO
+  title?: string;
+  body: JournalBlock[];
+  verseRefs: VerseRef[]; // denormalized for reverse lookup
+  tags?: string[];
+  mood?: string;
+}

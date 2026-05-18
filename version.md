@@ -1,5 +1,27 @@
 # Bible App — Version History
 
+## v4.0.0
+
+### New Features
+- **Journal** — Dedicated digital journal for reflections and devotionals
+  - Multiple entries per day, each with a title, date, optional tags, and a block-based body
+  - Insert verses inline as styled blocks (with translation snapshot so entries stay stable over time)
+  - Markdown-lite formatting in text blocks (`**bold**`, `*italic*`, `# heading`, `> quote`, lists)
+  - Drag-free reordering, deletion, and inline add controls on every block
+  - List view grouped by month + calendar view with per-day entry previews
+  - Search across titles, body text, and references; tag filters
+  - Click verse references inside entries to jump to the reader
+- **Reader → Journal integration**
+  - Small green `j` superscript appears next to verses that have journal entries; click to open a popover showing entry titles, dates, and excerpts
+  - **Add to Journal** action in the verse menu — appends the verse to today's most recent entry (or creates a new one) and opens the editor
+- **Journal export / import** — Back up entries as JSON or Markdown; import JSON to merge or replace
+
+### Infrastructure
+- New `JournalContext` with reverse-index for fast verse → entries lookup
+- `release/` added to `.gitignore` so build artifacts don't get accidentally committed from GitHub Desktop
+
+---
+
 ## v3.0.1
 
 ### Bug Fixes

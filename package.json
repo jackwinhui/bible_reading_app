@@ -1,7 +1,7 @@
 {
   "name": "bible-app",
   "private": true,
-  "version": "3.0.1",
+  "version": "4.0.0",
   "description": "A modern Bible reading app with ESV, NASB1995, CSB, and NLT translations",
   "author": "jackwinhui <jackwin@jackwinhui.com>",
   "type": "module",

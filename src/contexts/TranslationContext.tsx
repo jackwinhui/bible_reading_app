@@ -26,6 +26,7 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTranslation() {
   const ctx = useContext(TranslationContext);
   if (!ctx) throw new Error('useTranslation must be used within TranslationProvider');

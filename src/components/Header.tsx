@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Book, Bookmark, StickyNote, Brain, Settings } from 'lucide-react';
+import { Book, Bookmark, StickyNote, Brain, Settings, NotebookPen } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import { useTranslation } from '../contexts/TranslationContext';
 import type { Translation } from '../types';
@@ -19,6 +19,7 @@ export default function Header() {
 
   const navItems = [
     { to: lastReadPath, icon: Book, label: 'Read' },
+    { to: '/journal', icon: NotebookPen, label: 'Journal' },
     { to: '/bookmarks', icon: Bookmark, label: 'Bookmarks' },
     { to: '/annotations', icon: StickyNote, label: 'Notes' },
     { to: '/memory', icon: Brain, label: 'Memory' },
@@ -37,12 +38,13 @@ export default function Header() {
 
         <nav className="flex items-center gap-1">
           {navItems.map(({ to, icon: Icon, label }) => {
-            const isActive = location.pathname === to || 
-              (to !== '/bookmarks' && to !== '/annotations' && to !== '/memory' && 
-               (location.pathname === '/' || location.pathname.startsWith('/read')));
+            const isReadItem = label === 'Read';
+            const isActive = isReadItem
+              ? location.pathname === '/' || location.pathname.startsWith('/read')
+              : location.pathname === to || location.pathname.startsWith(to + '/');
             return (
               <Link
-                key={to}
+                key={label}
                 to={to}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium no-underline transition-colors ${
                   isActive

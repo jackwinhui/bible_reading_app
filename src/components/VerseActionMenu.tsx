@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { BookmarkPlus, BookmarkCheck, MessageSquarePlus, MessageSquare } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BookmarkPlus, BookmarkCheck, MessageSquarePlus, MessageSquare, NotebookPen } from 'lucide-react';
 import { useBookmarks } from '../contexts/BookmarkContext';
 import { useAnnotations } from '../contexts/AnnotationContext';
 import { useTranslation } from '../contexts/TranslationContext';
+import { useJournal, newJournalBlockId } from '../contexts/JournalContext';
+import type { JournalBlock, JournalEntry, VerseRef } from '../types';
 
 interface VerseActionMenuProps {
   book: string;
@@ -23,22 +26,19 @@ export default function VerseActionMenu({
   onClose,
   anchorRect,
 }: VerseActionMenuProps) {
+  const navigate = useNavigate();
   const { addBookmark, removeBookmark, isBookmarked, getBookmark } = useBookmarks();
   const { hasAnnotation, getAnnotation, addAnnotation } = useAnnotations();
   const { translation } = useTranslation();
+  const { entries, createEntry, updateEntry } = useJournal();
   const [showAnnotationInput, setShowAnnotationInput] = useState(false);
-  const [annotationText, setAnnotationText] = useState('');
+  const [annotationText, setAnnotationText] = useState(
+    () => getAnnotation(book, chapter, verse)?.note ?? ''
+  );
   const menuRef = useRef<HTMLDivElement>(null);
 
   const bookmarked = isBookmarked(book, chapter, verse);
   const annotated = hasAnnotation(book, chapter, verse);
-
-  useEffect(() => {
-    if (isOpen && annotated) {
-      const existing = getAnnotation(book, chapter, verse);
-      if (existing) setAnnotationText(existing.note);
-    }
-  }, [isOpen, annotated, book, chapter, verse, getAnnotation]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -70,13 +70,43 @@ export default function VerseActionMenu({
     }
   };
 
+  const handleAddToJournal = () => {
+    const ref: VerseRef = { book, chapter, verseStart: verse, translation };
+    const today = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const verseBlock: JournalBlock = {
+      id: newJournalBlockId(),
+      type: 'verse',
+      ref,
+      snapshot: verseText.replace(/\n+/g, ' ').trim(),
+    };
+    const trailingText: JournalBlock = { id: newJournalBlockId(), type: 'text', content: '' };
+
+    // Append to today's most-recently-updated entry if it exists; otherwise create new
+    const todays = entries
+      .filter((e) => e.date === today)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    let target: JournalEntry;
+    if (todays.length > 0) {
+      target = todays[0];
+      const newBody = [...target.body, verseBlock, trailingText];
+      updateEntry(target.id, { body: newBody });
+    } else {
+      target = createEntry({ body: [verseBlock, trailingText] });
+    }
+    onClose();
+    navigate(`/journal/${target.id}`);
+  };
+
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-white dark:bg-surface-800 rounded-xl shadow-lg border border-surface-200 dark:border-surface-700 p-2 min-w-[200px]"
+      className="fixed z-50 bg-white dark:bg-surface-800 rounded-xl shadow-lg border border-surface-200 dark:border-surface-700 p-2 min-w-[220px]"
       style={{
         top: anchorRect.bottom + 8,
-        left: Math.min(anchorRect.left, window.innerWidth - 220),
+        left: Math.min(anchorRect.left, window.innerWidth - 240),
       }}
     >
       <div className="text-xs text-surface-400 dark:text-surface-500 px-2 py-1 mb-1">
@@ -115,6 +145,14 @@ export default function VerseActionMenu({
             <span className="text-surface-700 dark:text-surface-300">Add Note</span>
           </>
         )}
+      </button>
+
+      <button
+        onClick={handleAddToJournal}
+        className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors text-left"
+      >
+        <NotebookPen className="w-4 h-4 text-emerald-500" />
+        <span className="text-surface-700 dark:text-surface-300">Add to Journal</span>
       </button>
 
       {showAnnotationInput && (

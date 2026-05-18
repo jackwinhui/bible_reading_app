@@ -254,7 +254,7 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
     const verseHtml = nextSpanIdx >= 0 ? rawSegment.slice(0, nextSpanIdx) : rawSegment;
 
     // Strip HTML tags, clean whitespace
-    let verseText = stripHtmlTags(verseHtml).replace(/\s+/g, ' ').trim();
+    const verseText = stripHtmlTags(verseHtml).replace(/\s+/g, ' ').trim();
     if (!verseText) continue;
 
     // Check for heading before this verse

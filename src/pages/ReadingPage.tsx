@@ -6,8 +6,10 @@ import { fetchChapter } from '../services/bibleApi';
 import { useTranslation } from '../contexts/TranslationContext';
 import { useBookmarks } from '../contexts/BookmarkContext';
 import { useAnnotations } from '../contexts/AnnotationContext';
+import { useJournal } from '../contexts/JournalContext';
 import type { Verse } from '../types';
 import VerseActionMenu from '../components/VerseActionMenu';
+import JournalPopover from '../components/JournalPopover';
 
 export default function ReadingPage() {
   const { bookName, chapter } = useParams();
@@ -15,6 +17,7 @@ export default function ReadingPage() {
   const { translation } = useTranslation();
   const { isBookmarked } = useBookmarks();
   const { hasAnnotation, getAnnotation } = useAnnotations();
+  const { getEntriesForVerse } = useJournal();
 
   const decodedName = decodeURIComponent(bookName || '');
   const chapterNum = parseInt(chapter || '1', 10);
@@ -27,6 +30,11 @@ export default function ReadingPage() {
   const [selectedVerse, setSelectedVerse] = useState<{
     verse: number;
     text: string;
+    rect: DOMRect;
+  } | null>(null);
+
+  const [journalPopover, setJournalPopover] = useState<{
+    verse: number;
     rect: DOMRect;
   } | null>(null);
 
@@ -138,6 +146,7 @@ export default function ReadingPage() {
             const bookmarked = isBookmarked(decodedName, chapterNum, verse.verse);
             const annotated = hasAnnotation(decodedName, chapterNum, verse.verse);
             const annotation = annotated ? getAnnotation(decodedName, chapterNum, verse.verse) : null;
+            const journalEntries = getEntriesForVerse(decodedName, chapterNum, verse.verse);
             const isPoetry = verse.text.includes('\n');
 
             return (
@@ -210,6 +219,19 @@ export default function ReadingPage() {
                       </span>
                     </span>
                   )}
+                  {journalEntries.length > 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setJournalPopover({ verse: verse.verse, rect });
+                      }}
+                      className="inline-flex items-center justify-center align-super ml-0.5 px-1 min-w-[1rem] h-4 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors leading-none"
+                      title={`${journalEntries.length} journal ${journalEntries.length === 1 ? 'entry' : 'entries'}`}
+                    >
+                      j{journalEntries.length > 1 ? journalEntries.length : ''}
+                    </button>
+                  )}
                 </span>
               </span>
             );
@@ -220,6 +242,7 @@ export default function ReadingPage() {
       {/* Verse action menu */}
       {selectedVerse && (
         <VerseActionMenu
+          key={`${decodedName}-${chapterNum}-${selectedVerse.verse}`}
           book={decodedName}
           chapter={chapterNum}
           verse={selectedVerse.verse}
@@ -227,6 +250,17 @@ export default function ReadingPage() {
           isOpen={true}
           onClose={() => setSelectedVerse(null)}
           anchorRect={selectedVerse.rect}
+        />
+      )}
+
+      {/* Journal entries popover */}
+      {journalPopover && (
+        <JournalPopover
+          book={decodedName}
+          chapter={chapterNum}
+          verse={journalPopover.verse}
+          anchorRect={journalPopover.rect}
+          onClose={() => setJournalPopover(null)}
         />
       )}
 
