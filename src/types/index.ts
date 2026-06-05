@@ -58,7 +58,21 @@ export type Translation = 'ESV' | 'NASB1995' | 'CSB' | 'NLT';
 
 export type Theme = 'light' | 'dark';
 
-// --- Journal ---
+// --- Custom Memory Verses ---
+
+export interface CustomMemoryVerse {
+  id: string;
+  title: string;          // user-given title (e.g., "Christ in You")
+  reference: string;      // formatted reference (e.g., "Colossians 1:27")
+  book: string;
+  chapter: number;
+  verseStart: number;
+  verseEnd: number | null;
+  translation: Translation;
+  description?: string;   // explanation / notes
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface VerseRef {
   book: string;

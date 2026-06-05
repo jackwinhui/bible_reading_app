@@ -321,13 +321,27 @@ function BlockEditor({
   onDragStart,
   onDragEnd,
 }: BlockEditorProps) {
-  const [draggable, setDraggable] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // Imperatively toggle the `draggable` attribute on mousedown so the DOM
+  // is updated synchronously (React's setState is too async — by the time
+  // the browser checks for drag intent on the same mousedown, the attribute
+  // wouldn't be set yet).
+  const armDrag = () => rootRef.current?.setAttribute('draggable', 'true');
+  const disarmDrag = () => rootRef.current?.removeAttribute('draggable');
+
+  // If the user mouses down on the grip but never drags (just a click),
+  // make sure the `draggable` attribute gets removed so subsequent mousedowns
+  // on child elements (e.g., the contentEditable) don't accidentally drag.
+  useEffect(() => {
+    const onDocMouseUp = () => disarmDrag();
+    document.addEventListener('mouseup', onDocMouseUp);
+    return () => document.removeEventListener('mouseup', onDocMouseUp);
+  }, []);
 
   return (
     <div
       ref={rootRef}
-      draggable={draggable}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move';
         // Some browsers require non-empty data for the drag to start
@@ -336,7 +350,7 @@ function BlockEditor({
         onDragStart();
       }}
       onDragEnd={() => {
-        setDraggable(false);
+        disarmDrag();
         onDragEnd();
       }}
       className={`group relative flex gap-2 rounded-lg transition-opacity ${
@@ -346,9 +360,7 @@ function BlockEditor({
       {/* Inline toolbar — always part of the layout, only visible on hover */}
       <div className="w-7 shrink-0 flex flex-col gap-0.5 pt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <button
-          onMouseDown={() => setDraggable(true)}
-          onMouseUp={() => setDraggable(false)}
-          onMouseLeave={() => setDraggable(false)}
+          onMouseDown={armDrag}
           className="p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700 cursor-grab active:cursor-grabbing"
           title="Drag to reorder"
         >

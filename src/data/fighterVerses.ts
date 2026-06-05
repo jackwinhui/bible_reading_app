@@ -56,11 +56,11 @@ export const fighterVerses: FighterVerse[] = [
 ];
 
 export function getCurrentWeekVerse(): FighterVerse {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  const diff = now.getTime() - start.getTime();
+  // Week 1 starts Sunday January 4, 2026. After 52 weeks the cycle repeats.
+  const startMs = new Date(2026, 0, 4).getTime();
+  const now = Date.now();
   const oneWeek = 1000 * 60 * 60 * 24 * 7;
-  const weekNumber = Math.ceil(diff / oneWeek);
-  const weekIndex = ((weekNumber - 1) % 52);
+  const weeksSinceStart = Math.floor((now - startMs) / oneWeek);
+  const weekIndex = ((weeksSinceStart % 52) + 52) % 52;
   return fighterVerses[weekIndex];
 }

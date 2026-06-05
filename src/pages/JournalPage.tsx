@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Plus, Search, Calendar, List, ArrowLeft, BookOpen, Tag } from 'lucide-react';
+import { Plus, Search, Calendar, List, ArrowLeft, BookOpen, Tag, CalendarDays } from 'lucide-react';
 import { useJournal } from '../contexts/JournalContext';
 import JournalEditor from '../components/JournalEditor';
 import { formatVerseRef, parseLocalDate } from '../utils/markdown';
 import { contentToPlainText } from '../utils/html';
 import type { JournalEntry } from '../types';
 
-type View = 'list' | 'calendar';
+type View = 'list' | 'calendar' | 'onThisDay';
 
 export default function JournalPage() {
   const { entryId } = useParams();
@@ -49,7 +49,15 @@ function EntryView({ entryId }: { entryId: string }) {
 function ListPage() {
   const navigate = useNavigate();
   const { entries, createEntry } = useJournal();
-  const [view, setView] = useState<View>('list');
+  const [view, setView] = useState<View>(() => {
+    // Optional one-shot hint from the homepage "On this day" card
+    const hint = sessionStorage.getItem('journal-default-view');
+    if (hint === 'onThisDay' || hint === 'calendar' || hint === 'list') {
+      sessionStorage.removeItem('journal-default-view');
+      return hint;
+    }
+    return 'list';
+  });
   const [search, setSearch] = useState('');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
 
@@ -131,11 +139,21 @@ function ListPage() {
           >
             <Calendar className="w-3.5 h-3.5" /> Calendar
           </button>
+          <button
+            onClick={() => setView('onThisDay')}
+            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md ${
+              view === 'onThisDay'
+                ? 'bg-white dark:bg-surface-700 shadow-sm'
+                : 'text-surface-500'
+            }`}
+          >
+            <CalendarDays className="w-3.5 h-3.5" /> On This Day
+          </button>
         </div>
       </div>
 
       {/* Tag filter */}
-      {allTags.length > 0 && (
+      {allTags.length > 0 && view !== 'onThisDay' && (
         <div className="flex flex-wrap gap-1 mb-4">
           <button
             onClick={() => setTagFilter(null)}
@@ -168,8 +186,10 @@ function ListPage() {
         <EmptyState onNew={handleNew} />
       ) : view === 'list' ? (
         <ListView entries={filtered} />
-      ) : (
+      ) : view === 'calendar' ? (
         <CalendarView entries={filtered} />
+      ) : (
+        <OnThisDayView entries={entries} />
       )}
     </div>
   );
@@ -383,6 +403,157 @@ function CalendarView({ entries }: { entries: JournalEntry[] }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// "On This Day" — 5-year-journal style view. Shows all entries that fall on
+// the selected month/day, grouped by year (most recent first).
+function OnThisDayView({ entries }: { entries: JournalEntry[] }) {
+  const today = new Date();
+  const todayMonth = today.getMonth() + 1;
+  const todayDay = today.getDate();
+  const [month, setMonth] = useState(todayMonth);
+  const [day, setDay] = useState(todayDay);
+
+  const isToday = month === todayMonth && day === todayDay;
+
+  // Group entries by year for the selected month/day
+  const yearGroups = useMemo(() => {
+    const map = new Map<number, JournalEntry[]>();
+    for (const e of entries) {
+      const d = parseLocalDate(e.date);
+      if (d.getMonth() + 1 === month && d.getDate() === day) {
+        const y = d.getFullYear();
+        if (!map.has(y)) map.set(y, []);
+        map.get(y)!.push(e);
+      }
+    }
+    // Sort entries within each year by updatedAt desc, and return [year, entries]
+    // sorted by year desc.
+    return Array.from(map.entries())
+      .map(([year, items]) => [
+        year,
+        [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      ] as const)
+      .sort((a, b) => b[0] - a[0]);
+  }, [entries, month, day]);
+
+  const totalEntries = yearGroups.reduce((acc, [, items]) => acc + items.length, 0);
+  const yearsSpan = yearGroups.length;
+
+  const dateLabel = new Date(2000, month - 1, day).toLocaleDateString(undefined, {
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const goToToday = () => {
+    setMonth(todayMonth);
+    setDay(todayDay);
+  };
+
+  const shiftDays = (delta: number) => {
+    const d = new Date(2000, month - 1, day);
+    d.setDate(d.getDate() + delta);
+    setMonth(d.getMonth() + 1);
+    setDay(d.getDate());
+  };
+
+  return (
+    <div>
+      {/* Date selector */}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => shiftDays(-1)}
+            className="p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800"
+            title="Previous day"
+          >
+            ←
+          </button>
+          <div className="text-lg font-semibold text-surface-900 dark:text-surface-100 px-2">
+            {dateLabel}
+            {isToday && (
+              <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300">
+                Today
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => shiftDays(1)}
+            className="p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800"
+            title="Next day"
+          >
+            →
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isToday && (
+            <button
+              onClick={goToToday}
+              className="text-xs px-3 py-1.5 rounded-lg border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800"
+            >
+              Jump to today
+            </button>
+          )}
+          <input
+            type="date"
+            value={`2000-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`}
+            onChange={(e) => {
+              const [, m, d] = e.target.value.split('-').map((n) => parseInt(n, 10));
+              if (m && d) {
+                setMonth(m);
+                setDay(d);
+              }
+            }}
+            className="text-xs px-2 py-1.5 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900"
+            title="Pick a date (year ignored)"
+          />
+        </div>
+      </div>
+
+      <p className="text-sm text-surface-500 dark:text-surface-400 mb-6">
+        {totalEntries === 0
+          ? `No entries on ${dateLabel} from past years yet.`
+          : `${totalEntries} ${totalEntries === 1 ? 'entry' : 'entries'} across ${yearsSpan} ${yearsSpan === 1 ? 'year' : 'years'}.`}
+      </p>
+
+      {totalEntries === 0 ? (
+        <div className="text-center py-12 border border-dashed border-surface-200 dark:border-surface-700 rounded-xl">
+          <CalendarDays className="w-10 h-10 mx-auto text-surface-300 dark:text-surface-700 mb-3" />
+          <p className="text-sm text-surface-500">
+            Nothing to look back on for {dateLabel} yet.
+          </p>
+          <p className="text-xs text-surface-400 mt-1">
+            Keep journaling — over time this becomes your "this day across the years" reflection.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {yearGroups.map(([year, items]) => {
+            const yearsAgo = today.getFullYear() - year;
+            const subtitle =
+              yearsAgo === 0
+                ? 'This year'
+                : yearsAgo === 1
+                  ? '1 year ago'
+                  : `${yearsAgo} years ago`;
+            return (
+              <section key={year}>
+                <div className="flex items-baseline gap-3 mb-3 pb-1 border-b border-surface-200 dark:border-surface-700">
+                  <h3 className="text-2xl font-bold text-surface-900 dark:text-surface-100">
+                    {year}
+                  </h3>
+                  <span className="text-xs text-surface-400 uppercase tracking-wider">{subtitle}</span>
+                </div>
+                <div className="space-y-2">
+                  {items.map((e) => <EntryRow key={e.id} entry={e} />)}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

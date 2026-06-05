@@ -1,5 +1,24 @@
 # Bible App — Version History
 
+## v4.1.0
+
+### New Features
+- **"On This Day" journal view** — A new third tab on the Journal page (next to List and Calendar) that shows all journal entries from a given month/day across every year you've journaled — like a 5-year journal. Navigate day-by-day, jump back to today, or pick any date. When you have entries from past years on today's date, a small "On this day" card also appears on the home page linking straight to the view.
+- **Custom memory verses** — A new "My Verses" tab on the Memory page lets you add your own verses to memorize (e.g., your church's weekly memory verse). Each verse has a title, reference, translation, and optional description/explanation. Verses can be edited, deleted, and practiced with the same study/test/score flow as Fighter Verses.
+
+### Bug Fixes
+- **Fighter Verses week alignment** — Previously the app counted weeks since January 1, which doesn't match the standard Sunday-anchored week numbering. Week 1 now correctly starts on Sunday, January 4, 2026, with each subsequent week starting on a Sunday.
+- **Drag-and-drop journal blocks now reliable** — The grip handle's `onMouseLeave` was killing the drag the moment the cursor moved off the grip to actually drag. Also fixed the timing of the `draggable` attribute (it was being set via React state, which is async — by the time the browser checked for drag intent on the same mousedown, the attribute wasn't set yet). Now uses an imperative ref to set the attribute synchronously.
+
+### Polish
+- **Removed "attempts" counter on memory verses** — Just shows the best score so you can practice as much as you want without watching a discouraging tally climb.
+
+### Infrastructure
+- New `CustomVersesContext` with localStorage persistence.
+- New `utils/bookResolver.ts` extracted from the verse picker so both the journal verse picker and the new custom verse editor share a single resolver for book names, abbreviations, and aliases.
+
+---
+
 ## v4.0.2
 
 ### New Features

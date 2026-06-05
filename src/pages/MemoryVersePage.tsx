@@ -10,39 +10,104 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  Plus,
+  Pencil,
+  Trash2,
+  Sparkles,
+  BookOpen,
 } from 'lucide-react';
 import { fighterVerses, getCurrentWeekVerse } from '../data/fighterVerses';
 import { fetchVerseRange, getVerseText } from '../services/bibleApi';
 import { compareVerses, type ComparisonResult } from '../utils/verseComparison';
 import { useTranslation } from '../contexts/TranslationContext';
-import { getProgressForWeek, updateProgressForWeek } from '../utils/storage';
-import type { FighterVerse, MemoryProgress } from '../types';
+import { useCustomVerses } from '../contexts/CustomVersesContext';
+import {
+  getProgressForWeek,
+  updateProgressForWeek,
+  getProgressForCustomVerse,
+  updateProgressForCustomVerse,
+} from '../utils/storage';
+import type { CustomMemoryVerse, FighterVerse, Translation } from '../types';
+import CustomVerseEditorModal from '../components/CustomVerseEditorModal';
 
+type Tab = 'fighter' | 'custom';
 type Stage = 'study' | 'type' | 'result';
 
+/** Normalized "memorizable verse" — covers both fighter and custom verses. */
+interface ActiveVerse {
+  source: 'fighter' | 'custom';
+  fighterWeek?: number;        // present for fighter
+  customId?: string;           // present for custom
+  title: string;               // user-facing title (reference or custom title)
+  reference: string;
+  book: string;
+  chapter: number;
+  verseStart: number;
+  verseEnd: number | null;
+  translation?: Translation;   // null = use user's current translation
+  description?: string;
+}
+
+function fighterToActive(v: FighterVerse): ActiveVerse {
+  return {
+    source: 'fighter',
+    fighterWeek: v.week,
+    title: v.reference,
+    reference: v.reference,
+    book: v.book,
+    chapter: v.chapter,
+    verseStart: v.verseStart,
+    verseEnd: v.verseEnd,
+  };
+}
+
+function customToActive(v: CustomMemoryVerse): ActiveVerse {
+  return {
+    source: 'custom',
+    customId: v.id,
+    title: v.title,
+    reference: v.reference,
+    book: v.book,
+    chapter: v.chapter,
+    verseStart: v.verseStart,
+    verseEnd: v.verseEnd,
+    translation: v.translation,
+    description: v.description,
+  };
+}
+
 export default function MemoryVersePage() {
-  const { translation } = useTranslation();
+  const { translation: userTranslation } = useTranslation();
+  const { verses: customVerses, addVerse, updateVerse, removeVerse } = useCustomVerses();
   const currentWeekVerse = getCurrentWeekVerse();
-  const [selectedVerse, setSelectedVerse] = useState<FighterVerse>(currentWeekVerse);
+
+  const [tab, setTab] = useState<Tab>('fighter');
+  const [active, setActive] = useState<ActiveVerse>(() => fighterToActive(currentWeekVerse));
   const [verseText, setVerseText] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>('study');
   const [typedText, setTypedText] = useState('');
   const [result, setResult] = useState<ComparisonResult | null>(null);
-  const [progress, setProgress] = useState<MemoryProgress | undefined>();
+  const [bestScore, setBestScore] = useState<number | undefined>();
   const [showVerse, setShowVerse] = useState(true);
+
+  // Custom verse editor modal
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingVerse, setEditingVerse] = useState<CustomMemoryVerse | undefined>();
+
+  const translationForActive = active.translation ?? userTranslation;
 
   const loadVerse = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const verses = await fetchVerseRange(
-        selectedVerse.book,
-        selectedVerse.chapter,
-        selectedVerse.verseStart,
-        selectedVerse.verseEnd,
-        translation
+        active.book,
+        active.chapter,
+        active.verseStart,
+        active.verseEnd,
+        translationForActive
       );
       setVerseText(getVerseText(verses));
     } catch (err) {
@@ -50,7 +115,7 @@ export default function MemoryVersePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedVerse, translation]);
+  }, [active, translationForActive]);
 
   useEffect(() => {
     loadVerse();
@@ -58,15 +123,28 @@ export default function MemoryVersePage() {
     setTypedText('');
     setResult(null);
     setShowVerse(true);
-    setProgress(getProgressForWeek(selectedVerse.week));
-  }, [loadVerse, selectedVerse.week]);
+    if (active.source === 'fighter') {
+      setBestScore(getProgressForWeek(active.fighterWeek!)?.bestScore);
+    } else {
+      setBestScore(getProgressForCustomVerse(active.customId!)?.bestScore);
+    }
+  }, [loadVerse, active]);
 
   const handleCheck = () => {
     const comparison = compareVerses(typedText, verseText);
     setResult(comparison);
     setStage('result');
-    const updated = updateProgressForWeek(selectedVerse.week, selectedVerse.reference, comparison.score);
-    setProgress(updated);
+    if (active.source === 'fighter') {
+      const updated = updateProgressForWeek(
+        active.fighterWeek!,
+        active.reference,
+        comparison.score
+      );
+      setBestScore(updated.bestScore);
+    } else {
+      const updated = updateProgressForCustomVerse(active.customId!, comparison.score);
+      setBestScore(updated.bestScore);
+    }
   };
 
   const handleReset = () => {
@@ -82,10 +160,42 @@ export default function MemoryVersePage() {
     setTypedText('');
   };
 
-  const navigateWeek = (dir: -1 | 1) => {
-    const newWeek = selectedVerse.week + dir;
+  const navigateFighterWeek = (dir: -1 | 1) => {
+    if (active.source !== 'fighter') return;
+    const newWeek = active.fighterWeek! + dir;
     if (newWeek >= 1 && newWeek <= 52) {
-      setSelectedVerse(fighterVerses[newWeek - 1]);
+      setActive(fighterToActive(fighterVerses[newWeek - 1]));
+    }
+  };
+
+  const selectFighter = (fv: FighterVerse) => setActive(fighterToActive(fv));
+  const selectCustom = (cv: CustomMemoryVerse) => setActive(customToActive(cv));
+
+  const handleSaveCustom = (
+    init: Omit<CustomMemoryVerse, 'id' | 'createdAt' | 'updatedAt'>
+  ) => {
+    if (editingVerse) {
+      updateVerse(editingVerse.id, init);
+      // Refresh active if currently studying this verse
+      if (active.source === 'custom' && active.customId === editingVerse.id) {
+        setActive(customToActive({ ...editingVerse, ...init, updatedAt: new Date().toISOString() }));
+      }
+    } else {
+      const created = addVerse(init);
+      // Auto-select the newly added verse
+      setTab('custom');
+      setActive(customToActive(created));
+    }
+    setEditingVerse(undefined);
+  };
+
+  const handleDeleteCustom = (cv: CustomMemoryVerse) => {
+    if (!confirm(`Delete "${cv.title}"? This cannot be undone.`)) return;
+    removeVerse(cv.id);
+    // If currently studying this verse, fall back to current fighter week
+    if (active.source === 'custom' && active.customId === cv.id) {
+      setActive(fighterToActive(currentWeekVerse));
+      setTab('fighter');
     }
   };
 
@@ -97,61 +207,106 @@ export default function MemoryVersePage() {
           Memory Verse
         </h1>
         <p className="text-surface-500 dark:text-surface-400">
-          Fighter Verses Set 1 — Memorize one verse per week
+          Memorize Scripture — Fighter Verses set 1 + your own custom verses
         </p>
       </div>
 
-      {/* Week selector */}
-      <div className="flex items-center justify-between mb-6 p-4 rounded-xl bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700">
+      {/* Tab selector */}
+      <div className="flex gap-1 bg-surface-100 dark:bg-surface-800 rounded-lg p-0.5 mb-6 w-fit">
         <button
-          onClick={() => navigateWeek(-1)}
-          disabled={selectedVerse.week <= 1}
-          className="p-2 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-800 disabled:opacity-30 transition-colors"
+          onClick={() => setTab('fighter')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md ${
+            tab === 'fighter'
+              ? 'bg-white dark:bg-surface-700 shadow-sm'
+              : 'text-surface-500'
+          }`}
         >
-          <ChevronLeft className="w-5 h-5" />
+          <Sparkles className="w-3.5 h-3.5" /> Fighter Verses
         </button>
-
-        <div className="text-center">
-          <div className="text-xs text-surface-400 dark:text-surface-500 uppercase tracking-wider">
-            Week {selectedVerse.week} of 52
-            {selectedVerse.week === currentWeekVerse.week && (
-              <span className="ml-2 px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-600 dark:text-primary-400 text-xs">
-                This Week
-              </span>
-            )}
-          </div>
-          <div className="text-lg font-semibold text-surface-800 dark:text-surface-200 mt-1">
-            {selectedVerse.reference}
-          </div>
-        </div>
-
         <button
-          onClick={() => navigateWeek(1)}
-          disabled={selectedVerse.week >= 52}
-          className="p-2 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-800 disabled:opacity-30 transition-colors"
+          onClick={() => setTab('custom')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md ${
+            tab === 'custom'
+              ? 'bg-white dark:bg-surface-700 shadow-sm'
+              : 'text-surface-500'
+          }`}
         >
-          <ChevronRight className="w-5 h-5" />
+          <BookOpen className="w-3.5 h-3.5" /> My Verses
+          {customVerses.length > 0 && (
+            <span className="text-xs text-surface-400">({customVerses.length})</span>
+          )}
         </button>
       </div>
 
-      {/* Progress card */}
-      {progress && (
+      {tab === 'fighter' && active.source === 'fighter' && (
+        <div className="flex items-center justify-between mb-6 p-4 rounded-xl bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700">
+          <button
+            onClick={() => navigateFighterWeek(-1)}
+            disabled={active.fighterWeek! <= 1}
+            className="p-2 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-800 disabled:opacity-30 transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+
+          <div className="text-center">
+            <div className="text-xs text-surface-400 dark:text-surface-500 uppercase tracking-wider">
+              Week {active.fighterWeek} of 52
+              {active.fighterWeek === currentWeekVerse.week && (
+                <span className="ml-2 px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-600 dark:text-primary-400 text-xs">
+                  This Week
+                </span>
+              )}
+            </div>
+            <div className="text-lg font-semibold text-surface-800 dark:text-surface-200 mt-1">
+              {active.reference}
+            </div>
+          </div>
+
+          <button
+            onClick={() => navigateFighterWeek(1)}
+            disabled={active.fighterWeek! >= 52}
+            className="p-2 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-800 disabled:opacity-30 transition-colors"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
+      {tab === 'custom' && active.source === 'custom' && (
+        <div className="mb-6 p-4 rounded-xl bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700">
+          <div className="text-xs text-surface-400 dark:text-surface-500 uppercase tracking-wider mb-1">
+            {active.reference} ({translationForActive})
+          </div>
+          <div className="text-lg font-semibold text-surface-800 dark:text-surface-200">
+            {active.title}
+          </div>
+          {active.description && (
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-2 whitespace-pre-wrap">
+              {active.description}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Best score badge (no attempts counter) */}
+      {bestScore !== undefined && (
         <div className="mb-6 flex items-center gap-4 p-3 rounded-lg bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700">
           <Trophy className="w-5 h-5 text-amber-500" />
-          <div className="flex-1 text-sm">
-            <span className="text-surface-600 dark:text-surface-400">
-              Best: <strong className="text-surface-800 dark:text-surface-200">{progress.bestScore}%</strong>
-            </span>
-            <span className="mx-3 text-surface-300 dark:text-surface-600">·</span>
-            <span className="text-surface-600 dark:text-surface-400">
-              {progress.attempts} attempt{progress.attempts !== 1 ? 's' : ''}
-            </span>
+          <div className="flex-1 text-sm text-surface-600 dark:text-surface-400">
+            Best score: <strong className="text-surface-800 dark:text-surface-200">{bestScore}%</strong>
           </div>
         </div>
       )}
 
-      {/* Content area */}
-      {loading ? (
+      {/* Practice area or empty state for custom */}
+      {tab === 'custom' && customVerses.length === 0 ? (
+        <CustomEmptyState
+          onAdd={() => {
+            setEditingVerse(undefined);
+            setEditorOpen(true);
+          }}
+        />
+      ) : loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
           <span className="ml-2 text-surface-500">Loading verse...</span>
@@ -171,7 +326,7 @@ export default function MemoryVersePage() {
               <div className="relative p-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900 mb-6">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
-                    {selectedVerse.reference} ({translation})
+                    {active.reference} ({translationForActive})
                   </span>
                   <button
                     onClick={() => setShowVerse(!showVerse)}
@@ -204,7 +359,7 @@ export default function MemoryVersePage() {
             <div>
               <div className="mb-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
                 <p className="text-sm text-amber-700 dark:text-amber-300">
-                  Type <strong>{selectedVerse.reference}</strong> from memory:
+                  Type <strong>{active.reference}</strong> from memory:
                 </p>
               </div>
 
@@ -316,7 +471,6 @@ export default function MemoryVersePage() {
                         </span>
                       );
                     }
-                    // extra
                     return (
                       <span
                         key={i}
@@ -372,55 +526,173 @@ export default function MemoryVersePage() {
         </>
       )}
 
-      {/* Week list */}
+      {/* Verse list for current tab */}
       <div className="mt-12 pt-8 border-t border-surface-200 dark:border-surface-700">
-        <h2 className="text-lg font-semibold text-surface-700 dark:text-surface-300 mb-4">
-          All Fighter Verses
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {fighterVerses.map((fv) => {
-            const prog = getProgressForWeek(fv.week);
-            const isCurrent = fv.week === currentWeekVerse.week;
-            const isSelected = fv.week === selectedVerse.week;
-            return (
-              <button
-                key={fv.week}
-                onClick={() => setSelectedVerse(fv)}
-                className={`flex items-center justify-between p-3 rounded-lg text-left text-sm transition-colors ${
-                  isSelected
-                    ? 'bg-primary-100 dark:bg-primary-900 border border-primary-300 dark:border-primary-700'
-                    : 'border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'
-                }`}
-              >
-                <div>
-                  <span className="text-xs text-surface-400 mr-2">W{fv.week}</span>
-                  <span className={`font-medium ${isSelected ? 'text-primary-700 dark:text-primary-300' : 'text-surface-700 dark:text-surface-300'}`}>
-                    {fv.reference}
-                  </span>
-                  {isCurrent && (
-                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-600 dark:text-primary-400">
-                      This week
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-surface-700 dark:text-surface-300">
+            {tab === 'fighter' ? 'All Fighter Verses' : 'My Custom Verses'}
+          </h2>
+          {tab === 'custom' && (
+            <button
+              onClick={() => {
+                setEditingVerse(undefined);
+                setEditorOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+            >
+              <Plus className="w-4 h-4" /> Add verse
+            </button>
+          )}
+        </div>
+
+        {tab === 'fighter' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {fighterVerses.map((fv) => {
+              const prog = getProgressForWeek(fv.week);
+              const isCurrent = fv.week === currentWeekVerse.week;
+              const isSelected = active.source === 'fighter' && active.fighterWeek === fv.week;
+              return (
+                <button
+                  key={fv.week}
+                  onClick={() => selectFighter(fv)}
+                  className={`flex items-center justify-between p-3 rounded-lg text-left text-sm transition-colors ${
+                    isSelected
+                      ? 'bg-primary-100 dark:bg-primary-900 border border-primary-300 dark:border-primary-700'
+                      : 'border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'
+                  }`}
+                >
+                  <div>
+                    <span className="text-xs text-surface-400 mr-2">W{fv.week}</span>
+                    <span className={`font-medium ${isSelected ? 'text-primary-700 dark:text-primary-300' : 'text-surface-700 dark:text-surface-300'}`}>
+                      {fv.reference}
+                    </span>
+                    {isCurrent && (
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-600 dark:text-primary-400">
+                        This week
+                      </span>
+                    )}
+                  </div>
+                  {prog && (
+                    <span
+                      className={`text-xs font-medium ${
+                        prog.bestScore >= 90
+                          ? 'text-green-500'
+                          : prog.bestScore >= 70
+                            ? 'text-amber-500'
+                            : 'text-surface-400'
+                      }`}
+                    >
+                      {prog.bestScore}%
                     </span>
                   )}
-                </div>
-                {prog && (
-                  <span
-                    className={`text-xs font-medium ${
-                      prog.bestScore >= 90
-                        ? 'text-green-500'
-                        : prog.bestScore >= 70
-                          ? 'text-amber-500'
-                          : 'text-surface-400'
-                    }`}
+                </button>
+              );
+            })}
+          </div>
+        ) : customVerses.length === 0 ? (
+          <p className="text-sm text-surface-400 text-center py-8">
+            No custom verses yet. Click "Add verse" to create your first.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {customVerses.map((cv) => {
+              const prog = getProgressForCustomVerse(cv.id);
+              const isSelected = active.source === 'custom' && active.customId === cv.id;
+              return (
+                <div
+                  key={cv.id}
+                  className={`group flex items-start gap-2 p-3 rounded-lg border transition-colors ${
+                    isSelected
+                      ? 'bg-primary-50 dark:bg-primary-950/30 border-primary-300 dark:border-primary-700'
+                      : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'
+                  }`}
+                >
+                  <button
+                    onClick={() => selectCustom(cv)}
+                    className="flex-1 min-w-0 text-left"
                   >
-                    {prog.bestScore}%
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-medium text-sm ${isSelected ? 'text-primary-700 dark:text-primary-300' : 'text-surface-800 dark:text-surface-200'}`}>
+                        {cv.title}
+                      </span>
+                      {prog && (
+                        <span
+                          className={`text-xs font-medium ${
+                            prog.bestScore >= 90
+                              ? 'text-green-500'
+                              : prog.bestScore >= 70
+                                ? 'text-amber-500'
+                                : 'text-surface-400'
+                          }`}
+                        >
+                          {prog.bestScore}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
+                      {cv.reference} · {cv.translation}
+                    </div>
+                    {cv.description && (
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mt-1 line-clamp-2">
+                        {cv.description}
+                      </div>
+                    )}
+                  </button>
+                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => {
+                        setEditingVerse(cv);
+                        setEditorOpen(true);
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-500"
+                      title="Edit"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCustom(cv)}
+                      className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-red-500"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      <CustomVerseEditorModal
+        isOpen={editorOpen}
+        initial={editingVerse}
+        onClose={() => {
+          setEditorOpen(false);
+          setEditingVerse(undefined);
+        }}
+        onSave={handleSaveCustom}
+      />
+    </div>
+  );
+}
+
+function CustomEmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="text-center py-16 border border-dashed border-surface-200 dark:border-surface-700 rounded-xl">
+      <BookOpen className="w-12 h-12 mx-auto text-surface-300 dark:text-surface-700 mb-3" />
+      <h3 className="text-base font-semibold text-surface-700 dark:text-surface-300 mb-1">
+        No custom memory verses yet
+      </h3>
+      <p className="text-sm text-surface-500 mb-5 max-w-sm mx-auto">
+        Add verses from your church, a memorization plan, or any verse you want to hide in your heart.
+      </p>
+      <button
+        onClick={onAdd}
+        className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
+      >
+        <Plus className="w-4 h-4" /> Add your first verse
+      </button>
     </div>
   );
 }
