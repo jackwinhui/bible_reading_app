@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Settings, Eye, EyeOff, ExternalLink, Check, Download, Upload, NotebookPen } from 'lucide-react';
 import { useApiKeys } from '../contexts/ApiKeysContext';
 import { useJournal } from '../contexts/JournalContext';
+import { contentToPlainText } from '../utils/html';
 import type { JournalEntry } from '../types';
 
 export default function SettingsPage() {
@@ -41,7 +42,7 @@ export default function SettingsPage() {
       lines.push('');
       for (const b of e.body) {
         if (b.type === 'text') {
-          lines.push(b.content);
+          lines.push(contentToPlainText(b.content));
           lines.push('');
         } else {
           const range = b.ref.verseEnd && b.ref.verseEnd > b.ref.verseStart
@@ -51,6 +52,11 @@ export default function SettingsPage() {
           lines.push(`> ${b.snapshot}`);
           lines.push('');
         }
+      }
+      if (e.prayer && contentToPlainText(e.prayer).trim()) {
+        lines.push('## Prayer / Applications');
+        lines.push(contentToPlainText(e.prayer));
+        lines.push('');
       }
       lines.push('---\n');
     }

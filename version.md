@@ -1,5 +1,23 @@
 # Bible App — Version History
 
+## v4.0.2
+
+### New Features
+- **WYSIWYG journal editor** — Replaced the markdown textarea with an inline rich-text editor. A small floating toolbar appears above the focused text block with Bold, Italic, Underline, H1/H2/H3, bullet & numbered lists, blockquote, and a "clear formatting" button.
+  - Keyboard shortcuts work out of the box: ⌘/Ctrl+B / I / U.
+  - Existing entries written in markdown are auto-migrated to HTML on first read; legacy `**asterisks**` and `# hashes` no longer leak into list previews or search results.
+  - HTML is sanitized (whitelist of safe tags, all attributes stripped) so imported JSON entries can't smuggle in scripts.
+- **Drag-and-drop block reordering** — Each block now has a ⋮⋮ grip handle in its hover toolbar. Drag to a highlighted drop zone between blocks to reorder. The existing up/down/delete arrow buttons are still there as a fallback.
+- **Quick-reference parser accepts abbreviations** — The "Insert Verse" quick-reference field now resolves common abbreviations (e.g. `Jn 3:16`, `1 Cor 13:4-7`, `Ps 23`, `Rom 8`, `Phil 4:13`, `1Pet 5:7`, `Song 2:4`) in addition to full book names. Punctuation and spacing variants (`1Cor.`, `1 cor`, `1cor`) all work, as do en/em-dashes in ranges.
+- **Prayer / Applications section** — A dedicated rich-text section is now always present at the bottom of every journal entry, with a prompt ("What is God leading you to pray about, repent of, or apply from what you read today?"). Indexed by search and included in the Markdown export under its own heading.
+
+### Bug Fixes
+- **Journal list dates were off by one** — Entries dated e.g. `2026-06-05` displayed as `Jun 4` in negative-UTC timezones because `new Date("YYYY-MM-DD")` is parsed as UTC midnight but rendered in local time. The list, calendar grouping, and popover now parse those strings as local dates.
+- **Journal block toolbar reachable** — The move/delete buttons and the inter-block `+ text / + verse` buttons no longer disappear when you move the cursor toward them. The block toolbar is now an inline column inside the hover region, and the inter-block add controls have a persistent hit zone with their own hover state.
+- **No more "shrink on focus"** — Re-clicking into a paragraph block no longer changes its height. The WYSIWYG editor renders as a single persistent contentEditable rather than toggling between a textarea and a preview view.
+
+---
+
 ## v4.0.1
 
 ### Bug Fixes

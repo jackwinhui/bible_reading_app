@@ -44,3 +44,38 @@ body {
 .dark .verse-highlight {
   background-color: rgba(96, 165, 250, 0.15);
 }
+
+/* WYSIWYG journal editor: show placeholder when empty */
+.empty-editor::before {
+  content: attr(data-placeholder);
+  color: #a8a29e;
+  pointer-events: none;
+  display: block;
+}
+.dark .empty-editor::before {
+  color: #57534e;
+}
+
+/* Native styling inside the contentEditable since Tailwind Typography
+   is not bundled; keep it minimal and consistent with our spacing. */
+.prose h1 { font-size: 1.5rem; font-weight: 700; margin: 0.5em 0 0.25em; }
+.prose h2 { font-size: 1.25rem; font-weight: 600; margin: 0.5em 0 0.25em; }
+.prose h3 { font-size: 1.1rem; font-weight: 600; margin: 0.5em 0 0.25em; }
+.prose p { margin: 0.4em 0; }
+.prose ul { list-style: disc; padding-left: 1.5em; margin: 0.4em 0; }
+.prose ol { list-style: decimal; padding-left: 1.5em; margin: 0.4em 0; }
+.prose li { margin: 0.15em 0; }
+.prose blockquote {
+  border-left: 3px solid #d6d3d1;
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  color: #57534e;
+  font-style: italic;
+}
+.dark .prose blockquote {
+  border-left-color: #44403c;
+  color: #a8a29e;
+}
+.prose strong { font-weight: 600; }
+.prose em { font-style: italic; }
+.prose u { text-decoration: underline; }

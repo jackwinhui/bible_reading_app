@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Plus, BookPlus, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
+import { Trash2, Plus, BookPlus, ChevronUp, ChevronDown, ExternalLink, GripVertical, HeartHandshake } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { JournalEntry, JournalBlock, VerseRef } from '../types';
 import { useJournal, newJournalBlockId } from '../contexts/JournalContext';
 import VersePickerModal from './VersePickerModal';
-import { renderMarkdown, formatVerseRef } from '../utils/markdown';
+import RichTextEditor from './RichTextEditor';
+import { formatVerseRef } from '../utils/markdown';
+import { htmlToPlainText } from '../utils/html';
 
 interface JournalEditorProps {
   entry: JournalEntry;
@@ -16,6 +18,7 @@ export default function JournalEditor({ entry, onClose }: JournalEditorProps) {
   const [title, setTitle] = useState(entry.title ?? '');
   const [date, setDate] = useState(entry.date);
   const [body, setBody] = useState<JournalBlock[]>(entry.body);
+  const [prayer, setPrayer] = useState(entry.prayer ?? '');
   const [tags, setTags] = useState<string>((entry.tags ?? []).join(', '));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerInsertIndex, setPickerInsertIndex] = useState<number | null>(null);
@@ -37,19 +40,22 @@ export default function JournalEditor({ entry, onClose }: JournalEditorProps) {
         title: title.trim() || undefined,
         date,
         body,
+        prayer: prayer.trim() ? prayer : undefined,
         tags: tagList.length > 0 ? tagList : undefined,
       });
       setSavedAt(new Date().toLocaleTimeString());
     }, 400);
     return () => clearTimeout(t);
-  }, [title, date, body, tags, entry.id, updateEntry]);
+  }, [title, date, body, prayer, tags, entry.id, updateEntry]);
 
   const wordCount = useMemo(() => {
-    return body.reduce((acc, b) => {
-      if (b.type === 'text') return acc + b.content.split(/\s+/).filter(Boolean).length;
+    const bodyWords = body.reduce((acc, b) => {
+      if (b.type === 'text') return acc + htmlToPlainText(b.content).split(/\s+/).filter(Boolean).length;
       return acc + b.snapshot.split(/\s+/).filter(Boolean).length;
     }, 0);
-  }, [body]);
+    const prayerWords = htmlToPlainText(prayer).split(/\s+/).filter(Boolean).length;
+    return bodyWords + prayerWords;
+  }, [body, prayer]);
 
   const updateBlock = useCallback(
     (id: string, patch: Partial<JournalBlock>) => {
@@ -77,6 +83,27 @@ export default function JournalEditor({ entry, onClose }: JournalEditorProps) {
       return copy;
     });
   }, []);
+
+  const reorderBlock = useCallback((fromIndex: number, toIndex: number) => {
+    setBody((prev) => {
+      if (
+        fromIndex < 0 || fromIndex >= prev.length ||
+        toIndex < 0 || toIndex > prev.length ||
+        fromIndex === toIndex || fromIndex + 1 === toIndex
+      ) {
+        return prev;
+      }
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIndex, 1);
+      const insertAt = toIndex > fromIndex ? toIndex - 1 : toIndex;
+      copy.splice(insertAt, 0, moved);
+      return copy;
+    });
+  }, []);
+
+  // Drag state at the editor level so all blocks can react to it
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overGapIndex, setOverGapIndex] = useState<number | null>(null);
 
   const insertTextBlockAfter = useCallback((index: number) => {
     setBody((prev) => {
@@ -169,20 +196,56 @@ export default function JournalEditor({ entry, onClose }: JournalEditorProps) {
       />
 
       {/* Blocks */}
-      <div className="space-y-3">
+      <div className="space-y-1">
+        {/* Top drop zone */}
+        <DropZone
+          index={0}
+          active={dragIndex !== null && overGapIndex === 0 && dragIndex !== 0}
+          onDragOver={() => setOverGapIndex(0)}
+          onDrop={() => {
+            if (dragIndex !== null) reorderBlock(dragIndex, 0);
+            setDragIndex(null);
+            setOverGapIndex(null);
+          }}
+          visible={dragIndex !== null}
+        />
         {body.map((block, index) => (
-          <BlockEditor
-            key={block.id}
-            block={block}
-            isFirst={index === 0}
-            isLast={index === body.length - 1}
-            onChange={(patch) => updateBlock(block.id, patch)}
-            onRemove={() => removeBlock(block.id)}
-            onMoveUp={() => moveBlock(block.id, -1)}
-            onMoveDown={() => moveBlock(block.id, 1)}
-            onAddTextBelow={() => insertTextBlockAfter(index)}
-            onAddVerseBelow={() => openVersePicker(index)}
-          />
+          <div key={block.id}>
+            <BlockEditor
+              block={block}
+              index={index}
+              isFirst={index === 0}
+              isLast={index === body.length - 1}
+              isDragging={dragIndex === index}
+              onChange={(patch) => updateBlock(block.id, patch)}
+              onRemove={() => removeBlock(block.id)}
+              onMoveUp={() => moveBlock(block.id, -1)}
+              onMoveDown={() => moveBlock(block.id, 1)}
+              onAddTextBelow={() => insertTextBlockAfter(index)}
+              onAddVerseBelow={() => openVersePicker(index)}
+              onDragStart={() => setDragIndex(index)}
+              onDragEnd={() => {
+                setDragIndex(null);
+                setOverGapIndex(null);
+              }}
+            />
+            <DropZone
+              index={index + 1}
+              active={
+                dragIndex !== null &&
+                overGapIndex === index + 1 &&
+                dragIndex !== index &&
+                dragIndex !== index + 1
+              }
+              onDragOver={() => setOverGapIndex(index + 1)}
+              onDrop={() => {
+                if (dragIndex !== null) reorderBlock(dragIndex, index + 1);
+                setDragIndex(null);
+                setOverGapIndex(null);
+              }}
+              visible={dragIndex !== null}
+            />
+          </div>
         ))}
       </div>
 
@@ -202,6 +265,22 @@ export default function JournalEditor({ entry, onClose }: JournalEditorProps) {
         </button>
       </div>
 
+      {/* Prayer / Applications — always present, separate from body */}
+      <div className="mt-10 pt-6 border-t border-surface-200 dark:border-surface-700">
+        <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-surface-700 dark:text-surface-200">
+          <HeartHandshake className="w-4 h-4 text-rose-500" />
+          Prayer / Applications
+        </div>
+        <p className="text-xs text-surface-400 dark:text-surface-500 mb-3">
+          What is God leading you to pray about, repent of, or apply from what you read today?
+        </p>
+        <RichTextEditor
+          value={prayer}
+          onChange={setPrayer}
+          placeholder="Write your prayer or application..."
+        />
+      </div>
+
       <VersePickerModal
         isOpen={pickerOpen}
         onClose={() => setPickerOpen(false)}
@@ -213,43 +292,68 @@ export default function JournalEditor({ entry, onClose }: JournalEditorProps) {
 
 interface BlockEditorProps {
   block: JournalBlock;
+  index: number;
   isFirst: boolean;
   isLast: boolean;
+  isDragging: boolean;
   onChange: (patch: Partial<JournalBlock>) => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onAddTextBelow: () => void;
   onAddVerseBelow: () => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
 }
 
 function BlockEditor({
   block,
+  index,
   isFirst,
   isLast,
+  isDragging,
   onChange,
   onRemove,
   onMoveUp,
   onMoveDown,
   onAddTextBelow,
   onAddVerseBelow,
+  onDragStart,
+  onDragEnd,
 }: BlockEditorProps) {
-  const [showPreview, setShowPreview] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const textContent = block.type === 'text' ? block.content : null;
-
-  // Auto-grow textarea
-  useEffect(() => {
-    if (textContent === null || !textareaRef.current) return;
-    textareaRef.current.style.height = 'auto';
-    textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-  }, [textContent]);
+  const [draggable, setDraggable] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="group relative flex gap-2">
+    <div
+      ref={rootRef}
+      draggable={draggable}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        // Some browsers require non-empty data for the drag to start
+        e.dataTransfer.setData('text/plain', String(index));
+        if (rootRef.current) e.dataTransfer.setDragImage(rootRef.current, 20, 20);
+        onDragStart();
+      }}
+      onDragEnd={() => {
+        setDraggable(false);
+        onDragEnd();
+      }}
+      className={`group relative flex gap-2 rounded-lg transition-opacity ${
+        isDragging ? 'opacity-40' : 'opacity-100'
+      }`}
+    >
       {/* Inline toolbar — always part of the layout, only visible on hover */}
       <div className="w-7 shrink-0 flex flex-col gap-0.5 pt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <button
+          onMouseDown={() => setDraggable(true)}
+          onMouseUp={() => setDraggable(false)}
+          onMouseLeave={() => setDraggable(false)}
+          className="p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700 cursor-grab active:cursor-grabbing"
+          title="Drag to reorder"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </button>
         <button
           onClick={onMoveUp}
           disabled={isFirst}
@@ -277,25 +381,11 @@ function BlockEditor({
 
       <div className="flex-1 min-w-0">
         {block.type === 'text' ? (
-          <div>
-            {showPreview ? (
-              <div
-                className="prose prose-sm dark:prose-invert max-w-none p-3 rounded-lg bg-surface-50 dark:bg-surface-800/50 min-h-[60px] cursor-text"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(block.content) || '<p class="text-surface-400 italic">(empty)</p>' }}
-                onClick={() => setShowPreview(false)}
-              />
-            ) : (
-              <textarea
-                ref={textareaRef}
-                value={block.content}
-                onChange={(e) => onChange({ content: e.target.value })}
-                onBlur={() => block.content && setShowPreview(true)}
-                placeholder="Write your reflection... (markdown supported: **bold**, *italic*, # heading, > quote, - list)"
-                className="w-full min-h-[60px] p-3 rounded-lg bg-transparent border border-transparent hover:border-surface-200 dark:hover:border-surface-700 focus:border-surface-300 dark:focus:border-surface-600 focus:bg-surface-50 dark:focus:bg-surface-800/50 outline-none resize-none leading-relaxed"
-                rows={2}
-              />
-            )}
-          </div>
+          <RichTextEditor
+            value={block.content}
+            onChange={(html) => onChange({ content: html })}
+            placeholder="Write your reflection..."
+          />
         ) : (
           <VerseBlockView block={block} onAddBelow={onAddTextBelow} />
         )}
@@ -357,5 +447,38 @@ function VerseBlockView({
         “{block.snapshot}”
       </p>
     </div>
+  );
+}
+
+interface DropZoneProps {
+  index: number;
+  active: boolean;
+  visible: boolean;
+  onDragOver: () => void;
+  onDrop: () => void;
+}
+
+function DropZone({ active, visible, onDragOver, onDrop }: DropZoneProps) {
+  return (
+    <div
+      onDragOver={(e) => {
+        if (!visible) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        onDragOver();
+      }}
+      onDrop={(e) => {
+        if (!visible) return;
+        e.preventDefault();
+        onDrop();
+      }}
+      className={`transition-all duration-150 ${
+        visible
+          ? active
+            ? 'h-2 my-1 bg-primary-500 rounded-full'
+            : 'h-2 my-1 bg-transparent'
+          : 'h-0 my-0'
+      }`}
+    />
   );
 }

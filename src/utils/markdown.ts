@@ -102,3 +102,15 @@ export function formatVerseRef(ref: {
     : `${ref.verseStart}`;
   return `${ref.book} ${ref.chapter}:${range}`;
 }
+
+/**
+ * Parse a YYYY-MM-DD string as a date in the local timezone.
+ * Avoids the timezone shift you get with `new Date("2026-06-05")`,
+ * which JS treats as UTC midnight and then displays in local time
+ * (causing dates to render as the previous day in negative-UTC zones).
+ */
+export function parseLocalDate(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map((n) => parseInt(n, 10));
+  if (!y || !m || !d) return new Date(ymd);
+  return new Date(y, m - 1, d);
+}

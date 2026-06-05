@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { X, Pencil } from 'lucide-react';
 import { useJournal } from '../contexts/JournalContext';
-import { formatVerseRef } from '../utils/markdown';
+import { formatVerseRef, parseLocalDate } from '../utils/markdown';
+import { contentToPlainText } from '../utils/html';
 import type { JournalEntry } from '../types';
 
 interface JournalPopoverProps {
@@ -96,13 +97,13 @@ function EntryCard({
   const surrounding = (() => {
     if (refIdx === -1) {
       const first = entry.body.find((b) => b.type === 'text') as { content: string } | undefined;
-      return first?.content ?? '';
+      return contentToPlainText(first?.content ?? '');
     }
     // Prefer the next text block after the verse, else the previous
     const next = entry.body[refIdx + 1];
-    if (next && next.type === 'text' && next.content.trim()) return next.content;
+    if (next && next.type === 'text' && next.content.trim()) return contentToPlainText(next.content);
     const prev = entry.body[refIdx - 1];
-    if (prev && prev.type === 'text' && prev.content.trim()) return prev.content;
+    if (prev && prev.type === 'text' && prev.content.trim()) return contentToPlainText(prev.content);
     return '';
   })();
 
@@ -120,7 +121,7 @@ function EntryCard({
             {entry.title || 'Untitled entry'}
           </div>
           <div className="text-[11px] text-surface-400">
-            {new Date(entry.date).toLocaleDateString(undefined, {
+            {parseLocalDate(entry.date).toLocaleDateString(undefined, {
               weekday: 'short',
               month: 'short',
               day: 'numeric',

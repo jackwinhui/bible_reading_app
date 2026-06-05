@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Plus, Search, Calendar, List, ArrowLeft, BookOpen, Tag } from 'lucide-react';
 import { useJournal } from '../contexts/JournalContext';
 import JournalEditor from '../components/JournalEditor';
-import { formatVerseRef } from '../utils/markdown';
+import { formatVerseRef, parseLocalDate } from '../utils/markdown';
+import { contentToPlainText } from '../utils/html';
 import type { JournalEntry } from '../types';
 
 type View = 'list' | 'calendar';
@@ -65,7 +66,8 @@ function ListPage() {
     if (s) {
       result = result.filter((e) => {
         if ((e.title ?? '').toLowerCase().includes(s)) return true;
-        if (e.body.some((b) => b.type === 'text' && b.content.toLowerCase().includes(s))) return true;
+        if (e.body.some((b) => b.type === 'text' && contentToPlainText(b.content).toLowerCase().includes(s))) return true;
+        if (e.prayer && contentToPlainText(e.prayer).toLowerCase().includes(s)) return true;
         if (e.verseRefs.some((r) => formatVerseRef(r).toLowerCase().includes(s))) return true;
         return false;
       });
@@ -201,7 +203,7 @@ function ListView({ entries }: { entries: JournalEntry[] }) {
   // Group by month
   const groups = new Map<string, JournalEntry[]>();
   for (const e of entries) {
-    const d = new Date(e.date);
+    const d = parseLocalDate(e.date);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(e);
@@ -232,7 +234,7 @@ function ListView({ entries }: { entries: JournalEntry[] }) {
 
 function EntryRow({ entry }: { entry: JournalEntry }) {
   const firstText = entry.body.find((b) => b.type === 'text') as { content: string } | undefined;
-  const excerpt = (firstText?.content ?? '').slice(0, 180).trim();
+  const excerpt = contentToPlainText(firstText?.content ?? '').slice(0, 180).trim();
   return (
     <Link
       to={`/journal/${entry.id}`}
@@ -244,7 +246,7 @@ function EntryRow({ entry }: { entry: JournalEntry }) {
             {entry.title || 'Untitled entry'}
           </div>
           <div className="text-xs text-surface-400 mt-0.5">
-            {new Date(entry.date).toLocaleDateString(undefined, {
+            {parseLocalDate(entry.date).toLocaleDateString(undefined, {
               weekday: 'short',
               month: 'short',
               day: 'numeric',

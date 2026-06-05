@@ -79,6 +79,7 @@ export interface JournalEntry {
   updatedAt: string;     // ISO
   title?: string;
   body: JournalBlock[];
+  prayer?: string;       // HTML; "Prayer / Applications" section
   verseRefs: VerseRef[]; // denormalized for reverse lookup
   tags?: string[];
   mood?: string;
