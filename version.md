@@ -1,5 +1,21 @@
 # Bible App — Version History
 
+## v4.1.1
+
+### Bug Fixes
+- **Poetry line breaks for NASB1995 / CSB / NLT** — The API.Bible parser was collapsing all whitespace (including newlines) into single spaces, so Psalms and other poetry rendered as one long run-on line. The parser now treats each `<p class="q1">` / `<p class="q2">` (poetic line) as its own line with leading indentation, matching how ESV already rendered.
+- **47 incomplete ESV chapters** — The original ESV fetch only retried chapters with 0–1 verses, so chapters that came back with 2+ verses but were still truncated stayed broken. Refetched every ESV chapter whose verse count was significantly fewer than NASB1995's. Notable repairs include **John 10** (was 2 → now 42), **1 Peter 3** (2 → 22), **1 Chronicles 12** (3 → 40), **Lamentations 3** (33 → 66), **Matthew 27** (43 → 66), **Mark 9** (16 → 48), **Romans 8** (30 → 39), **Hebrews 9** (9 → 28), and 39 others. (Mark 9 stays at 48 because ESV legitimately omits the disputed 9:44 and 9:46.)
+- **698 ESV chapters had the next chapter's heading leaked into the last verse** — Refetched every affected chapter one-by-one (e.g., Psalm 86 no longer ends with "A Psalm of the Sons of Korah. A Song. Glorious Things of You Are Spoken").
+
+### Infrastructure
+- **Published DMG no longer bundles Bible text.** A new `npm run electron:build:public` build mode excludes the four bundled `bible-text-*.json` files (which contain ESV / NASB1995 / CSB / NLT text). The published DMG drops from ~116 MB to ~10 MB and the app falls back to live ESV API + api.bible fetches using the user's own API keys configured in Settings. The default `npm run electron:build` still bundles the JSONs for local/offline personal use only.
+- New utility scripts for maintaining the local JSON bundles:
+  - `scripts/refetch-esv-v2.mjs` — cross-references ESV verse counts against NASB1995 and refetches anything significantly short.
+  - `scripts/refetch-esv-headings.mjs` — refetches any ESV chapter whose last verse has a stale trailing heading.
+  - `scripts/refetch-apibible.mjs` — regenerates NASB1995 / CSB / NLT JSONs using the new line-break-preserving parser.
+
+---
+
 ## v4.1.0
 
 ### New Features

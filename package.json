@@ -1,7 +1,7 @@
 {
   "name": "bible-app",
   "private": true,
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "A modern Bible reading app with ESV, NASB1995, CSB, and NLT translations",
   "author": "jackwinhui <jackwin@jackwinhui.com>",
   "type": "module",
@@ -9,10 +9,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:public": "VITE_PUBLIC_BUILD=1 tsc -b && VITE_PUBLIC_BUILD=1 vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "electron:build": "npm run build && electron-builder",
+    "electron:build:public": "npm run build:public && electron-builder",
     "electron:build:all": "npm run build && electron-builder --mac --win --linux"
   },
   "build": {

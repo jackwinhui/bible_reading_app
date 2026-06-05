@@ -253,8 +253,11 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
     const nextSpanIdx = rawSegment.search(/<span[^>]*data-number="/i);
     const verseHtml = nextSpanIdx >= 0 ? rawSegment.slice(0, nextSpanIdx) : rawSegment;
 
-    // Strip HTML tags, clean whitespace
-    const verseText = stripHtmlTags(verseHtml).replace(/\s+/g, ' ').trim();
+    // Preserve poetry line structure: API.Bible uses <p class="q1"> for the
+    // first poetic line and <p class="q2"> for the indented continuation.
+    // We replace those with newlines + leading spaces that the reader
+    // converts to visual indents (4 spaces -> pl-4, 8 spaces -> pl-8).
+    const verseText = htmlToVerseText(verseHtml);
     if (!verseText) continue;
 
     // Check for heading before this verse
@@ -283,6 +286,68 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
   return verses;
 }
 
+/**
+ * Convert API.Bible verse HTML to text while preserving poetry line breaks.
+ * Each <p> within the verse becomes its own line. <p class="q\d"> paragraphs
+ * (poetic lines) get leading spaces that the reader treats as indent levels.
+ */
+function htmlToVerseText(html: string): string {
+  // Walk the html and turn each <p ...> ... </p> chunk into either:
+  //   - "<spaces><text>\n" for poetry (q1, q2, ...)
+  //   - "<text> " for prose
+  // Anything outside <p> tags is collected as-is between paragraph chunks.
+  const parts: string[] = [];
+
+  // Match every opening <p ...> and grab its class (if any) + its inner HTML
+  const pRe = /<p\b([^>]*)>([\s\S]*?)<\/p>/gi;
+  let lastEnd = 0;
+  let m: RegExpExecArray | null;
+  while ((m = pRe.exec(html)) !== null) {
+    // Any HTML before this <p> (e.g., text right after the verse marker but
+    // before its enclosing <p> closes — rare, but happens when the verse
+    // marker sits inside a paragraph that started before it)
+    if (m.index > lastEnd) {
+      const between = html.slice(lastEnd, m.index);
+      const cleaned = stripHtmlTags(between).replace(/[ \t]+/g, ' ').trim();
+      if (cleaned) parts.push(cleaned + ' ');
+    }
+    const attrs = m[1];
+    const inner = m[2];
+    const classMatch = /class="([^"]+)"/i.exec(attrs);
+    const className = classMatch?.[1] ?? '';
+    const text = stripHtmlTags(inner).replace(/[ \t]+/g, ' ').trim();
+    if (!text) {
+      lastEnd = pRe.lastIndex;
+      continue;
+    }
+    // Poetry classes: q, q1, q2, q3, q4, qr, qc, ...
+    const qMatch = /\bq([1-4])?\b/.exec(className);
+    if (qMatch) {
+      const level = qMatch[1] ? parseInt(qMatch[1], 10) : 1;
+      // 4 spaces per level — the reader maps >=4 to pl-4 and >=8 to pl-8
+      const indent = ' '.repeat(Math.min(level, 2) * 4);
+      parts.push(`${indent}${text}\n`);
+    } else {
+      // Prose paragraph — emit as a regular line (followed by space; the
+      // outer trim/collapse handles inter-paragraph spacing)
+      parts.push(`${text} `);
+    }
+    lastEnd = pRe.lastIndex;
+  }
+  // Tail content after the last </p>
+  if (lastEnd < html.length) {
+    const tail = stripHtmlTags(html.slice(lastEnd)).replace(/[ \t]+/g, ' ').trim();
+    if (tail) parts.push(tail);
+  }
+
+  // Join, normalize whitespace, but preserve \n boundaries
+  return parts
+    .join('')
+    .replace(/[ \t]+\n/g, '\n')  // trim trailing spaces on each line
+    .replace(/\n+/g, '\n')        // collapse runs of newlines
+    .trim();
+}
+
 function stripHtmlTags(html: string): string {
   return html
     .replace(/<br\s*\/?>/gi, '\n')
@@ -297,10 +362,17 @@ function stripHtmlTags(html: string): string {
 
 // --- Cache & public API ---
 
+// Bundled JSONs are large and license-restricted. Two build modes:
+//   - DEV (`npm run dev`) and the "personal" production build
+//     (`npm run electron:build`): bundles the JSONs for offline use.
+//   - PUBLIC build (`npm run electron:build:public`): sets
+//     VITE_PUBLIC_BUILD=1, which excludes the JSONs so the published DMG
+//     doesn't redistribute the text. App falls back to live API fetches.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const bundledData: Record<string, any> = {};
 
 async function loadBundledTranslation(translation: string): Promise<boolean> {
+  if (import.meta.env.VITE_PUBLIC_BUILD === '1') return false;
   if (bundledData[translation]) return true;
   try {
     const modules: Record<string, () => Promise<unknown>> = {
