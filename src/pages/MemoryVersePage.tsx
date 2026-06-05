@@ -275,26 +275,82 @@ export default function MemoryVersePage() {
 
               {/* Word-by-word comparison */}
               <div className="p-4 rounded-xl border border-surface-200 dark:border-surface-700 mb-6">
-                <h3 className="text-sm font-medium text-surface-500 mb-3">Word-by-word comparison:</h3>
-                <div className="flex flex-wrap gap-1">
-                  {result.words.map((w, i) => (
-                    <span
-                      key={i}
-                      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-sm ${
-                        w.correct
-                          ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
-                          : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
-                      }`}
-                      title={w.correct ? 'Correct' : `Expected: "${w.expected}"`}
-                    >
-                      {w.correct ? (
-                        <CheckCircle2 className="w-3 h-3" />
-                      ) : (
-                        <XCircle className="w-3 h-3" />
-                      )}
-                      {w.word || '___'}
+                <h3 className="text-sm font-medium text-surface-500 mb-3">
+                  Word-by-word comparison
+                </h3>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {result.words.map((w, i) => {
+                    if (w.kind === 'correct') {
+                      return (
+                        <span
+                          key={i}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-sm bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300"
+                          title="Correct"
+                        >
+                          <CheckCircle2 className="w-3 h-3" />
+                          {w.word}
+                        </span>
+                      );
+                    }
+                    if (w.kind === 'wrong') {
+                      return (
+                        <span
+                          key={i}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-sm bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300"
+                          title={`Expected: "${w.expected}"`}
+                        >
+                          <XCircle className="w-3 h-3" />
+                          <span className="line-through opacity-70">{w.word}</span>
+                          <span className="font-medium">→ {w.expected}</span>
+                        </span>
+                      );
+                    }
+                    if (w.kind === 'missing') {
+                      return (
+                        <span
+                          key={i}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-sm bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-dashed border-amber-400 dark:border-amber-700"
+                          title="Missing word"
+                        >
+                          + {w.expected}
+                        </span>
+                      );
+                    }
+                    // extra
+                    return (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-sm bg-surface-100 dark:bg-surface-800 text-surface-500 dark:text-surface-400 line-through"
+                        title="Extra word (not in verse)"
+                      >
+                        {w.word}
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-surface-500 dark:text-surface-400 pt-2 border-t border-surface-200 dark:border-surface-700">
+                  <span className="flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                    {result.correctWords} correct
+                  </span>
+                  {result.wrongWords > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                      {result.wrongWords} wrong
                     </span>
-                  ))}
+                  )}
+                  {result.missingWords > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                      {result.missingWords} missing
+                    </span>
+                  )}
+                  {result.extraWords > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block w-2 h-2 rounded-full bg-surface-400" />
+                      {result.extraWords} extra
+                    </span>
+                  )}
                 </div>
               </div>
 

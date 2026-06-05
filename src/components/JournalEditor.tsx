@@ -247,62 +247,78 @@ function BlockEditor({
   }, [textContent]);
 
   return (
-    <div className="group relative">
-      {/* Hover toolbar */}
-      <div className="absolute -left-12 top-1 hidden group-hover:flex flex-col gap-0.5 opacity-70 hover:opacity-100">
-        <button onClick={onMoveUp} disabled={isFirst} className="p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700 disabled:opacity-30">
+    <div className="group relative flex gap-2">
+      {/* Inline toolbar — always part of the layout, only visible on hover */}
+      <div className="w-7 shrink-0 flex flex-col gap-0.5 pt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <button
+          onClick={onMoveUp}
+          disabled={isFirst}
+          className="p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700 disabled:opacity-30 disabled:pointer-events-none"
+          title="Move up"
+        >
           <ChevronUp className="w-3.5 h-3.5" />
         </button>
-        <button onClick={onMoveDown} disabled={isLast} className="p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700 disabled:opacity-30">
+        <button
+          onClick={onMoveDown}
+          disabled={isLast}
+          className="p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700 disabled:opacity-30 disabled:pointer-events-none"
+          title="Move down"
+        >
           <ChevronDown className="w-3.5 h-3.5" />
         </button>
-        <button onClick={onRemove} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500">
+        <button
+          onClick={onRemove}
+          className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
+          title="Delete block"
+        >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      {block.type === 'text' ? (
-        <div>
-          {showPreview ? (
-            <div
-              className="prose prose-sm dark:prose-invert max-w-none p-3 rounded-lg bg-surface-50 dark:bg-surface-800/50 min-h-[60px]"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(block.content) || '<p class="text-surface-400 italic">(empty)</p>' }}
-              onClick={() => setShowPreview(false)}
-            />
-          ) : (
-            <textarea
-              ref={textareaRef}
-              value={block.content}
-              onChange={(e) => onChange({ content: e.target.value })}
-              onBlur={() => block.content && setShowPreview(true)}
-              placeholder="Write your reflection... (markdown supported: **bold**, *italic*, # heading, > quote, - list)"
-              className="w-full min-h-[60px] p-3 rounded-lg bg-transparent border border-transparent hover:border-surface-200 dark:hover:border-surface-700 focus:border-surface-300 dark:focus:border-surface-600 focus:bg-surface-50 dark:focus:bg-surface-800/50 outline-none resize-none leading-relaxed"
-              rows={2}
-            />
-          )}
-        </div>
-      ) : (
-        <VerseBlockView block={block} onAddBelow={onAddTextBelow} />
-      )}
+      <div className="flex-1 min-w-0">
+        {block.type === 'text' ? (
+          <div>
+            {showPreview ? (
+              <div
+                className="prose prose-sm dark:prose-invert max-w-none p-3 rounded-lg bg-surface-50 dark:bg-surface-800/50 min-h-[60px] cursor-text"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(block.content) || '<p class="text-surface-400 italic">(empty)</p>' }}
+                onClick={() => setShowPreview(false)}
+              />
+            ) : (
+              <textarea
+                ref={textareaRef}
+                value={block.content}
+                onChange={(e) => onChange({ content: e.target.value })}
+                onBlur={() => block.content && setShowPreview(true)}
+                placeholder="Write your reflection... (markdown supported: **bold**, *italic*, # heading, > quote, - list)"
+                className="w-full min-h-[60px] p-3 rounded-lg bg-transparent border border-transparent hover:border-surface-200 dark:hover:border-surface-700 focus:border-surface-300 dark:focus:border-surface-600 focus:bg-surface-50 dark:focus:bg-surface-800/50 outline-none resize-none leading-relaxed"
+                rows={2}
+              />
+            )}
+          </div>
+        ) : (
+          <VerseBlockView block={block} onAddBelow={onAddTextBelow} />
+        )}
 
-      {/* "Add block" between rows on hover at bottom */}
-      <div className="h-2 relative">
-        <div className="absolute inset-x-0 -bottom-1 flex justify-center opacity-0 group-hover:opacity-100">
-          <div className="flex gap-1 bg-white dark:bg-surface-900 px-1 rounded-full border border-surface-200 dark:border-surface-700 shadow-sm">
-            <button
-              onClick={onAddTextBelow}
-              className="text-[10px] px-2 py-0.5 rounded-full text-surface-500 hover:text-surface-700 dark:hover:text-surface-300"
-              title="Add paragraph below"
-            >
-              + text
-            </button>
-            <button
-              onClick={onAddVerseBelow}
-              className="text-[10px] px-2 py-0.5 rounded-full text-primary-500 hover:text-primary-700 dark:hover:text-primary-400"
-              title="Add verse below"
-            >
-              + verse
-            </button>
+        {/* "Add block" between rows — larger persistent hit zone so cursor can reach it */}
+        <div className="h-5 relative group/sep">
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover/sep:opacity-100 transition-opacity">
+            <div className="flex gap-1 bg-white dark:bg-surface-900 px-1 py-0.5 rounded-full border border-surface-200 dark:border-surface-700 shadow-sm">
+              <button
+                onClick={onAddTextBelow}
+                className="text-[10px] px-2 py-0.5 rounded-full text-surface-500 hover:text-surface-700 dark:hover:text-surface-300"
+                title="Add paragraph below"
+              >
+                + text
+              </button>
+              <button
+                onClick={onAddVerseBelow}
+                className="text-[10px] px-2 py-0.5 rounded-full text-primary-500 hover:text-primary-700 dark:hover:text-primary-400"
+                title="Add verse below"
+              >
+                + verse
+              </button>
+            </div>
           </div>
         </div>
       </div>

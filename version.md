@@ -1,5 +1,19 @@
 # Bible App — Version History
 
+## v4.0.1
+
+### Bug Fixes
+- **Journal: block toolbar now reachable** — The move/delete buttons and "+ text / + verse" between-block buttons used to disappear the moment you moved your cursor toward them because they were positioned outside the hover area. Restructured the block layout so the toolbar is an inline column inside the hover region; the inter-block add controls now have a persistent hit zone.
+- **Memory verse: smarter scoring** — Replaced the naive word-by-word index comparison with an LCS-based diff. Missing or extra words no longer cascade-fail the rest of the verse. The result view now distinguishes four categories:
+  - 🟢 **Correct** word
+  - 🔴 **Wrong** word at the right position (shows `yourword → expected`)
+  - 🟡 **Missing** word (`+ expected`, dashed amber pill)
+  - ⚪ **Extra** word (struck through)
+  - Plus a summary row with totals for each category.
+- **Memory verse: fixed broken smart-quote normalization** — The `normalize()` helper had lost its smart-quote / em-dash / ellipsis characters in past edits, so it was silently doing nothing. Rewritten using explicit Unicode escapes so `"`, `'`, `—`, and `…` typed by the user are properly normalized.
+
+---
+
 ## v4.0.0
 
 ### New Features
