@@ -1,5 +1,10 @@
 # Bible App — Version History
 
+## v5.0.3
+
+### Bug Fixes
+- **Recovered commentary for verse-by-verse chapters.** Chapters that Enduring Word formats without lettered sections — going straight to numbered points (e.g. Proverbs 10–21 and 27–29) — were showing as having no commentary. The parser now also recognizes these chapters, so all 15 affected Proverbs chapters now load correctly.
+
 ## v5.0.2
 
 ### Bug Fixes

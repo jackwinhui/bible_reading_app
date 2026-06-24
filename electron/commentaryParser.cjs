@@ -167,7 +167,14 @@ function parseCommentaryHtml(html, book, chapter, url) {
   // may be wrapped in inline tags (e.g. <h3><strong>A. ...</strong></h3>) and is
   // occasionally lowercased on the source page (e.g. "<h3>a. ..."), so allow
   // optional inline markup and either case between the <h3> and the letter.
-  const startMatch = html.search(/<h3[^>]*>\s*(?:<[^>]+>\s*)*[A-Za-z]\.\s/);
+  let startMatch = html.search(/<h3[^>]*>\s*(?:<[^>]+>\s*)*[A-Za-z]\.\s/);
+  if (startMatch === -1) {
+    // Some chapters (e.g. Proverbs 10-21, 27-29) have no lettered sections and
+    // go straight to numbered points ("<h4>1. (1) ...</h4>"). Start there,
+    // skipping the AI-summary <h4> blocks ("High Points", "Application") that
+    // don't begin with a numbered verse reference.
+    startMatch = html.search(/<h4[^>]*>\s*(?:<[^>]+>\s*)*\d+\.\s*\(/);
+  }
   if (startMatch === -1) return null;
 
   let endIdx = html.indexOf('\u00A9', startMatch); // ©
