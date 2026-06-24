@@ -253,11 +253,44 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
     const nextSpanIdx = rawSegment.search(/<span[^>]*data-number="/i);
     const verseHtml = nextSpanIdx >= 0 ? rawSegment.slice(0, nextSpanIdx) : rawSegment;
 
+    // The verse marker often sits INSIDE its first paragraph (e.g.
+    //   <p class="q"><span class="v">1</span>First line</p><p class="q">Second line</p>
+    // So `verseHtml` typically begins with the first line's text and a stray
+    // </p>. Look back in the full HTML to find the <p> that encloses the
+    // marker; capture its class so the leading orphan text can be re-wrapped
+    // as if it were a complete paragraph (preserves poetry line structure).
+    let leadingClass = '';
+    const before = html.slice(0, startPos);
+    // Find the last <p ...> before this marker that hasn't been closed
+    const lastOpenP = before.lastIndexOf('<p');
+    if (lastOpenP >= 0) {
+      const afterOpen = before.slice(lastOpenP);
+      const closeIdx = afterOpen.indexOf('</p>');
+      // If there's no </p> between the open tag and the marker, the marker
+      // is inside this <p>. Capture its class.
+      if (closeIdx === -1) {
+        const m = /<p\b([^>]*)>/.exec(afterOpen);
+        const classMatch = m && /class="([^"]+)"/i.exec(m[1]);
+        leadingClass = classMatch?.[1] ?? '';
+      }
+    }
+    // Wrap the orphan leading text (everything before the first </p>) so
+    // htmlToVerseText sees a complete paragraph and applies the right class.
+    let segmentForParsing = verseHtml;
+    if (leadingClass) {
+      const firstClose = verseHtml.indexOf('</p>');
+      if (firstClose >= 0) {
+        const orphan = verseHtml.slice(0, firstClose);
+        const rest = verseHtml.slice(firstClose + 4);
+        segmentForParsing = `<p class="${leadingClass}">${orphan}</p>${rest}`;
+      }
+    }
+
     // Preserve poetry line structure: API.Bible uses <p class="q1"> for the
     // first poetic line and <p class="q2"> for the indented continuation.
     // We replace those with newlines + leading spaces that the reader
     // converts to visual indents (4 spaces -> pl-4, 8 spaces -> pl-8).
-    const verseText = htmlToVerseText(verseHtml);
+    const verseText = htmlToVerseText(segmentForParsing);
     if (!verseText) continue;
 
     // Check for heading before this verse

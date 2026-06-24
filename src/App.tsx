@@ -6,6 +6,7 @@ import { AnnotationProvider } from './contexts/AnnotationContext';
 import { ApiKeysProvider } from './contexts/ApiKeysContext';
 import { JournalProvider } from './contexts/JournalContext';
 import { CustomVersesProvider } from './contexts/CustomVersesContext';
+import { CommentaryProvider } from './contexts/CommentaryContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
 import ChapterPage from './pages/ChapterPage';
@@ -25,6 +26,7 @@ export default function App() {
           <AnnotationProvider>
             <JournalProvider>
               <CustomVersesProvider>
+                <CommentaryProvider>
                 <Routes>
                   <Route element={<Layout />}>
                     <Route path="/" element={<HomePage />} />
@@ -38,6 +40,7 @@ export default function App() {
                     <Route path="/settings" element={<SettingsPage />} />
                   </Route>
                 </Routes>
+                </CommentaryProvider>
               </CustomVersesProvider>
             </JournalProvider>
           </AnnotationProvider>

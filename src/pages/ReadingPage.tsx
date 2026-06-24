@@ -1,15 +1,17 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, AlertCircle, BookOpen } from 'lucide-react';
 import { books } from '../data/books';
 import { fetchChapter } from '../services/bibleApi';
 import { useTranslation } from '../contexts/TranslationContext';
 import { useBookmarks } from '../contexts/BookmarkContext';
 import { useAnnotations } from '../contexts/AnnotationContext';
 import { useJournal } from '../contexts/JournalContext';
+import { useCommentary } from '../contexts/CommentaryContext';
 import type { Verse } from '../types';
 import VerseActionMenu from '../components/VerseActionMenu';
 import JournalPopover from '../components/JournalPopover';
+import CommentaryPanel from '../components/CommentaryPanel';
 
 export default function ReadingPage() {
   const { bookName, chapter } = useParams();
@@ -18,6 +20,7 @@ export default function ReadingPage() {
   const { isBookmarked } = useBookmarks();
   const { hasAnnotation, getAnnotation } = useAnnotations();
   const { getEntriesForVerse } = useJournal();
+  const { showCommentary, toggleCommentary } = useCommentary();
 
   const decodedName = decodeURIComponent(bookName || '');
   const chapterNum = parseInt(chapter || '1', 10);
@@ -81,7 +84,9 @@ export default function ReadingPage() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="h-full flex">
+      <div className="flex-1 overflow-y-auto">
+        <div className={`p-6 mx-auto ${showCommentary ? 'max-w-2xl' : 'max-w-3xl'}`}>
       {/* Navigation header */}
       <div className="flex items-center justify-between mb-6">
         <button
@@ -112,6 +117,17 @@ export default function ReadingPage() {
               <ArrowRight className="w-4 h-4" />
             </button>
           )}
+          <button
+            onClick={toggleCommentary}
+            className={`p-2 rounded-lg transition-colors ${
+              showCommentary
+                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
+                : 'hover:bg-surface-100 dark:hover:bg-surface-800 text-surface-500'
+            }`}
+            title={showCommentary ? 'Hide commentary' : 'Show Enduring Word commentary'}
+          >
+            <BookOpen className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -289,6 +305,19 @@ export default function ReadingPage() {
           ) : (
             <span />
           )}
+        </div>
+      )}
+        </div>
+      </div>
+
+      {/* Commentary side panel */}
+      {showCommentary && (
+        <div className="hidden md:flex w-[42%] min-w-[340px] max-w-[600px] h-full">
+          <CommentaryPanel
+            book={decodedName}
+            chapter={chapterNum}
+            activeVerse={selectedVerse?.verse ?? null}
+          />
         </div>
       )}
     </div>

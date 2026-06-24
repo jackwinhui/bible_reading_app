@@ -23,6 +23,7 @@ release/
 # Personal
 scripts/
 src/data/bible-text-*.json
+src/data/commentary-enduring-word.json
 
 # Editor directories and files
 .vscode/*

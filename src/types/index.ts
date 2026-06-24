@@ -56,6 +56,29 @@ export interface MemoryProgress {
 
 export type Translation = 'ESV' | 'NASB1995' | 'CSB' | 'NLT';
 
+// --- Commentary (Enduring Word) ---
+
+export interface CommentaryParagraph {
+  indent: number; // 0, 1, or 2 — nesting level from the source padding
+  html: string;   // sanitized inline HTML (em/strong/b/i/br only)
+}
+
+export interface CommentarySection {
+  id: string;
+  level: 'section' | 'point'; // 'section' = lettered (A./B.), 'point' = numbered
+  heading: string;
+  verses: [number, number] | null; // verse range this section covers, if any
+  paragraphs: CommentaryParagraph[];
+}
+
+export interface CommentaryChapter {
+  book: string;
+  chapter: number;
+  source: 'Enduring Word';
+  url: string;
+  sections: CommentarySection[];
+}
+
 export type Theme = 'light' | 'dark';
 
 // --- Custom Memory Verses ---

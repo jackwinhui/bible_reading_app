@@ -9,6 +9,11 @@ a regular web app.
 
 - **Read the Bible** — All 66 books with chapter-by-chapter navigation
 - **Four translations** — ESV, NASB1995, CSB, and NLT (toggle in the header)
+- **Commentary** — Read David Guzik's Enduring Word commentary in a side panel
+  alongside any chapter (toggle with the book icon in the reading header).
+  Click a verse to scroll the commentary to that verse's section. The personal
+  build bundles commentary for offline use; the published build fetches it live
+  from enduringword.com on demand.
 - **Bookmarks** — Save favorite verses and revisit them
 - **Annotations** — Add short personal notes to any verse
 - **Journal** — Dated, block-based reflections with inline verse embeds

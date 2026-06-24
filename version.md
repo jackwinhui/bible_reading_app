@@ -1,5 +1,13 @@
 # Bible App — Version History
 
+## v5.0.0
+
+### New Features
+- **Enduring Word commentary alongside reading** — A toggleable side panel on the reading page shows David Guzik's Enduring Word commentary next to the chapter text. Clicking a verse scrolls the commentary to that verse's section (section-anchored sync, since exact line alignment isn't possible). The toggle state persists.
+  - **Personal build** bundles commentary locally for offline use. Run `npm run fetch:commentary` to scrape and populate `src/data/commentary-enduring-word.json` (gitignored, like the bundled Bible text). Supports resume and a `--force` refetch.
+  - **Public build** does *not* bundle commentary — it live-fetches each chapter from enduringword.com on demand via the Electron main process (the renderer can't fetch it directly due to CORS), with a persistent on-disk cache so each chapter is fetched at most once.
+  - New `electron/preload.cjs` exposes a minimal `window.commentary.fetch` bridge; `electron/commentaryParser.cjs` is shared between the scraper and the live-fetch handler.
+
 ## v4.1.1
 
 ### Bug Fixes

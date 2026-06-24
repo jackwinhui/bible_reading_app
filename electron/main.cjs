@@ -1,5 +1,7 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain, net } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const { parseCommentaryHtml, buildCommentaryUrl } = require('./commentaryParser.cjs');
 
 let mainWindow;
 
@@ -13,6 +15,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
@@ -27,6 +30,74 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// --- Enduring Word commentary live fetch (with on-disk cache) ---
+
+function commentaryCacheDir() {
+  const dir = path.join(app.getPath('userData'), 'commentary-cache');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch { /* ignore */ }
+  return dir;
+}
+
+function cacheFileFor(book, chapter) {
+  const safe = `${book}-${chapter}`.replace(/[^a-zA-Z0-9-]+/g, '_');
+  return path.join(commentaryCacheDir(), `${safe}.json`);
+}
+
+function fetchUrl(url) {
+  return new Promise((resolve, reject) => {
+    const request = net.request(url);
+    request.setHeader('User-Agent', 'BibleApp/1.0 (+commentary)');
+    request.on('response', (response) => {
+      if (response.statusCode === 404) {
+        resolve(null);
+        return;
+      }
+      if (response.statusCode >= 400) {
+        reject(new Error(`HTTP ${response.statusCode}`));
+        return;
+      }
+      const chunks = [];
+      response.on('data', (c) => chunks.push(c));
+      response.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      response.on('error', reject);
+    });
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+async function fetchCommentary(book, chapter) {
+  const cacheFile = cacheFileFor(book, chapter);
+  try {
+    if (fs.existsSync(cacheFile)) {
+      return JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
+    }
+  } catch { /* ignore corrupt cache */ }
+
+  const url = buildCommentaryUrl(book, chapter);
+  const html = await fetchUrl(url);
+  if (html === null) {
+    const empty = { book, chapter, source: 'Enduring Word', url, sections: [] };
+    try { fs.writeFileSync(cacheFile, JSON.stringify(empty)); } catch { /* ignore */ }
+    return empty;
+  }
+  const parsed = parseCommentaryHtml(html, book, chapter, url) || {
+    book, chapter, source: 'Enduring Word', url, sections: [],
+  };
+  try { fs.writeFileSync(cacheFile, JSON.stringify(parsed)); } catch { /* ignore */ }
+  return parsed;
+}
+
+ipcMain.handle('commentary:fetch', async (_event, { book, chapter }) => {
+  try {
+    return { ok: true, data: await fetchCommentary(book, chapter) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
 
 app.whenReady().then(createWindow);
 
