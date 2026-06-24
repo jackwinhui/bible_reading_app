@@ -1,7 +1,7 @@
 {
   "name": "bible-app",
   "private": true,
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "A modern Bible reading app with ESV, NASB1995, CSB, and NLT translations",
   "author": "jackwinhui <jackwin@jackwinhui.com>",
   "type": "module",
@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "build:public": "VITE_PUBLIC_BUILD=1 tsc -b && VITE_PUBLIC_BUILD=1 vite build",
     "fetch:commentary": "node scripts/fetch-enduring-word.mjs",
+    "watch:commentary": "node scripts/watch-commentary-progress.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "VITE_DEV_SERVER_URL=http://localhost:5173 electron .",

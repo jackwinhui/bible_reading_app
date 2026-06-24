@@ -27,7 +27,12 @@ function buildUrl(book: string, chapter: number): string {
 
 // --- Bundled commentary (personal build only) ---
 
-type BundledChapter = { url?: string; sections: CommentarySection[] };
+type BundledChapter = {
+  url?: string;
+  sections: CommentarySection[];
+  grouped?: boolean;
+  groupChapters?: number[];
+};
 type BundledBook = Record<string, BundledChapter>;
 let bundledData: Record<string, BundledBook> | null = null;
 let bundledLoaded = false;
@@ -59,6 +64,7 @@ function getBundledChapter(
     source: SOURCE_NAME,
     url: chap.url || buildUrl(book, chapter),
     sections: chap.sections,
+    ...(chap.grouped ? { grouped: true, groupChapters: chap.groupChapters } : {}),
   };
 }
 

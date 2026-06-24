@@ -77,6 +77,8 @@ export interface CommentaryChapter {
   source: 'Enduring Word';
   url: string;
   sections: CommentarySection[];
+  grouped?: boolean;        // true if Enduring Word combines several chapters on one page
+  groupChapters?: number[]; // the chapters covered by that combined page
 }
 
 export type Theme = 'light' | 'dark';

@@ -48,8 +48,13 @@ function cacheFileFor(book, chapter) {
 
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
-    const request = net.request(url);
+    const request = net.request({ url, redirect: 'manual' });
     request.setHeader('User-Agent', 'BibleApp/1.0 (+commentary)');
+    let finalUrl = url;
+    request.on('redirect', (status, _method, redirectUrl) => {
+      finalUrl = redirectUrl;
+      request.followRedirect();
+    });
     request.on('response', (response) => {
       if (response.statusCode === 404) {
         resolve(null);
@@ -61,7 +66,7 @@ function fetchUrl(url) {
       }
       const chunks = [];
       response.on('data', (c) => chunks.push(c));
-      response.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      response.on('end', () => resolve({ html: Buffer.concat(chunks).toString('utf-8'), finalUrl }));
       response.on('error', reject);
     });
     request.on('error', reject);
@@ -78,13 +83,13 @@ async function fetchCommentary(book, chapter) {
   } catch { /* ignore corrupt cache */ }
 
   const url = buildCommentaryUrl(book, chapter);
-  const html = await fetchUrl(url);
-  if (html === null) {
+  const fetched = await fetchUrl(url);
+  if (fetched === null) {
     const empty = { book, chapter, source: 'Enduring Word', url, sections: [] };
     try { fs.writeFileSync(cacheFile, JSON.stringify(empty)); } catch { /* ignore */ }
     return empty;
   }
-  const parsed = parseCommentaryHtml(html, book, chapter, url) || {
+  const parsed = parseCommentaryHtml(fetched.html, book, chapter, fetched.finalUrl) || {
     book, chapter, source: 'Enduring Word', url, sections: [],
   };
   try { fs.writeFileSync(cacheFile, JSON.stringify(parsed)); } catch { /* ignore */ }

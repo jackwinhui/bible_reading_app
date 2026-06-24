@@ -1,5 +1,15 @@
 # Bible App — Version History
 
+## v5.0.1
+
+### Bug Fixes
+- **Commentary parser missed entire sections on some chapters.** The Enduring Word page parser only recognized top-level section headings of the exact form `<h3>A. ...`. Three real-world variations caused sections (or whole chapters) to be silently dropped:
+  - **`<strong>`-wrapped headings** (e.g. `<h3><strong>A. ...</strong></h3>`) — affected ~54 chapters that appeared to have *no* commentary at all (Ezekiel 25–48, many of Proverbs 10–21, 1 Kings, Job, etc.).
+  - **Lowercased letters** (e.g. `<h3>a. ...`, a source-side typo on 2 Chronicles 12) — dropped the first section.
+  - The combination also caused a handful of chapters (Numbers 1, 1 Kings 6, Job 8, Job 32) to drop their opening "A" section while keeping later ones.
+- **Chapter:verse references broke verse-anchored scrolling.** Point headings like `(15:1-12)` (used throughout Joshua 15–19 and other chapters) were parsed as verse "15" instead of verses 1–12, so clicking a verse wouldn't scroll the commentary to the right place. The parser now resolves `chapter:verse` notation relative to the page's chapter, including ranges that span into the chapter.
+- Added a re-usable progress bar to the commentary scraper plus `npm run watch:commentary` to follow a running scrape live.
+
 ## v5.0.0
 
 ### New Features

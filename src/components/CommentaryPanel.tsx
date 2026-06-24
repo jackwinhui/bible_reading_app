@@ -113,6 +113,13 @@ export default function CommentaryPanel({ book, chapter, activeVerse }: Commenta
           </div>
         ) : (
           <div>
+            {data.grouped && data.groupChapters && (
+              <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300">
+                Enduring Word covers {book}{' '}
+                {data.groupChapters[0]}–{data.groupChapters[data.groupChapters.length - 1]}{' '}
+                on one combined page. Showing the portion for chapter {chapter}.
+              </div>
+            )}
             {data.sections.map((section) => {
               const isActive =
                 activeVerse != null && sectionContainsVerse(section, activeVerse);
