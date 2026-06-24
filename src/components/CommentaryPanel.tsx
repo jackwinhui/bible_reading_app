@@ -26,7 +26,7 @@ export default function CommentaryPanel({ book, chapter, activeVerse }: Commenta
   const [unavailable, setUnavailable] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const sectionRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const requestId = useRef(0);
 
   const load = useCallback(async () => {
@@ -59,9 +59,9 @@ export default function CommentaryPanel({ book, chapter, activeVerse }: Commenta
   // Scroll the commentary to the section matching the active verse.
   useEffect(() => {
     if (activeVerse == null || !data) return;
-    const match = data.sections.find((s) => sectionContainsVerse(s, activeVerse));
-    if (!match) return;
-    const el = sectionRefs.current.get(match.id);
+    const matchIndex = data.sections.findIndex((s) => sectionContainsVerse(s, activeVerse));
+    if (matchIndex < 0) return;
+    const el = sectionRefs.current.get(matchIndex);
     const container = scrollRef.current;
     if (el && container) {
       const top = el.offsetTop - container.offsetTop - 8;
@@ -120,14 +120,14 @@ export default function CommentaryPanel({ book, chapter, activeVerse }: Commenta
                 on one combined page. Showing the portion for chapter {chapter}.
               </div>
             )}
-            {data.sections.map((section) => {
+            {data.sections.map((section, i) => {
               const isActive =
                 activeVerse != null && sectionContainsVerse(section, activeVerse);
               return (
                 <div
-                  key={section.id}
+                  key={i}
                   ref={(el) => {
-                    if (el) sectionRefs.current.set(section.id, el);
+                    if (el) sectionRefs.current.set(i, el);
                   }}
                   className={`scroll-mt-2 ${section.level === 'section' ? 'mt-6 first:mt-0' : 'mt-4'}`}
                 >

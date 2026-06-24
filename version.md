@@ -1,5 +1,10 @@
 # Bible App — Version History
 
+## v5.0.2
+
+### Bug Fixes
+- **Commentary headings piled up when navigating between chapters.** On combined commentary pages (e.g. Joshua 15–22) a top-level section heading could reuse the same internal id as a numbered point, producing duplicate React keys. Navigating chapter-to-chapter then left stale section headings stacked at the top of the panel. The panel now keys sections by position, so each chapter renders cleanly.
+
 ## v5.0.1
 
 ### Bug Fixes
