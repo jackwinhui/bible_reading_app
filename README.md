@@ -107,3 +107,14 @@ the calendar week.
 
 See [`version.md`](./version.md) for the full version history.
 
+
+## Licence
+
+The code is [MIT](LICENSE) — use it, change it, ship it, no warranty.
+
+Scripture text is **not** covered by that licence and is not mine to grant. This
+app ships no Bible text: verses are fetched at runtime from the ESV and
+api.bible services using your own API key, and that text stays subject to the
+publishers' terms — see [`ESV_API_v3_guidelines.md`](./ESV_API_v3_guidelines.md).
+The verse lists here are references only (book, chapter, verse), which are facts
+rather than anything copyrightable.
