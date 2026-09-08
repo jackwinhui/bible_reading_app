@@ -1,5 +1,19 @@
 # Bible App — Version History
 
+## v5.0.4
+
+### Privacy
+- Public downloads start with empty API-key fields. Public builds ignore local environment files, strip build-time API-key defaults, and require each user to enter their own keys in Settings.
+- Added a public-build guard that rejects configured API keys, environment files, and bundled Bible/commentary data before packaging.
+- Public builds work from a clean checkout without private API keys or personal Bible/commentary files.
+
+### Bug Fixes
+- Save pending journal edits before navigation or window closing, without changing timestamps when an entry is merely opened.
+- Ignore stale chapter, memory-verse, and preview requests so older responses cannot overwrite the current selection.
+- Prevent stale or failed verse previews from being submitted, and preserve dialog drafts during unrelated re-renders.
+- Correct live ESV headings and stanza boundaries, API.Bible heading and verse-marker parsing, and full-book requests for single-chapter ESV books.
+- Report invalid references and empty API responses instead of displaying or caching blank results.
+
 ## v5.0.3
 
 ### Bug Fixes

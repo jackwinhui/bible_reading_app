@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { books } from '../data/books';
-import { fetchVerseRange, getVerseText } from '../services/bibleApi';
+import { getVerseText } from '../services/bibleApi';
 import { useTranslation } from '../contexts/TranslationContext';
+import { useVersePreview } from '../hooks/useVersePreview';
 import { parseReference } from '../utils/bookResolver';
 import type { CustomMemoryVerse, Translation } from '../types';
 
@@ -15,12 +16,25 @@ interface CustomVerseEditorModalProps {
 
 export default function CustomVerseEditorModal({
   isOpen,
+  ...props
+}: CustomVerseEditorModalProps) {
+  const { translation: defaultTr } = useTranslation();
+  if (!isOpen) return null;
+  return (
+    <CustomVerseForm
+      key={JSON.stringify([defaultTr, props.initial])}
+      {...props}
+      defaultTr={defaultTr}
+    />
+  );
+}
+
+function CustomVerseForm({
   initial,
   onClose,
   onSave,
-}: CustomVerseEditorModalProps) {
-  const { translation: defaultTr } = useTranslation();
-
+  defaultTr,
+}: Omit<CustomVerseEditorModalProps, 'isOpen'> & { defaultTr: Translation }) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [reference, setReference] = useState(initial?.reference ?? '');
   const [translation, setTranslation] = useState<Translation>(initial?.translation ?? defaultTr);
@@ -30,26 +44,14 @@ export default function CustomVerseEditorModal({
   const [verseEnd, setVerseEnd] = useState<number | ''>(initial?.verseEnd ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
 
-  const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setError] = useState<string | null>(null);
+  const { verses, loading, error: previewError } = useVersePreview(
+    book, chapter, verseStart, typeof verseEnd === 'number' ? verseEnd : null, translation
+  );
+  const preview = getVerseText(verses);
+  const error = previewError ?? formError;
 
   const bookData = useMemo(() => books.find((b) => b.name === book), [book]);
-
-  // Reset / hydrate from initial when opened
-  useEffect(() => {
-    if (!isOpen) return;
-    setTitle(initial?.title ?? '');
-    setReference(initial?.reference ?? '');
-    setTranslation(initial?.translation ?? defaultTr);
-    setBook(initial?.book ?? 'John');
-    setChapter(initial?.chapter ?? 1);
-    setVerseStart(initial?.verseStart ?? 1);
-    setVerseEnd(initial?.verseEnd ?? '');
-    setDescription(initial?.description ?? '');
-    setPreview('');
-    setError(null);
-  }, [isOpen, initial, defaultTr]);
 
   const handleReferenceChange = (val: string) => {
     setReference(val);
@@ -62,36 +64,12 @@ export default function CustomVerseEditorModal({
     }
   };
 
-  // Auto-preview (debounced)
-  useEffect(() => {
-    if (!isOpen) return;
-    const t = setTimeout(async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const end = typeof verseEnd === 'number' ? verseEnd : null;
-        const verses = await fetchVerseRange(book, chapter, verseStart, end, translation);
-        if (verses.length === 0) {
-          setError('No verses found for that reference.');
-          setPreview('');
-        } else {
-          setPreview(getVerseText(verses));
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load passage.');
-      } finally {
-        setLoading(false);
-      }
-    }, 350);
-    return () => clearTimeout(t);
-  }, [isOpen, book, chapter, verseStart, verseEnd, translation]);
-
   const handleSave = () => {
     if (!title.trim()) {
       setError('Please enter a title.');
       return;
     }
-    if (!preview && !loading) {
+    if (loading || !preview) {
       setError('Please select a valid verse reference.');
       return;
     }
@@ -109,8 +87,6 @@ export default function CustomVerseEditorModal({
     });
     onClose();
   };
-
-  if (!isOpen) return null;
 
   return (
     <div
@@ -139,7 +115,10 @@ export default function CustomVerseEditorModal({
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setError(null);
+              }}
               placeholder="e.g. Week 22 — Christ in You"
               className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
@@ -267,7 +246,7 @@ export default function CustomVerseEditorModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={loading || !title.trim() || (!preview && !loading)}
+            disabled={loading || !title.trim() || !preview}
             className="px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {initial ? 'Save changes' : 'Add verse'}

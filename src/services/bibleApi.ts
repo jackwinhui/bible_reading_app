@@ -1,23 +1,23 @@
 import type { Verse, Translation } from '../types';
+import { getBookByName } from '../data/books';
+import { getDefaultApiKeys, type ApiKeys } from '../utils/apiKeys';
 
 const ESV_BASE = 'https://api.esv.org/v3/passage/text/';
 const SCRIPTURE_BASE = 'https://rest.api.bible/v1';
 
-function getApiKeys(): { esvApiKey: string; scriptureApiKey: string } {
+function getApiKeys(): ApiKeys {
+  const defaults = getDefaultApiKeys();
   try {
     const stored = localStorage.getItem('bible-app-api-keys');
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
-        esvApiKey: parsed.esvApiKey || import.meta.env.VITE_ESV_API_KEY || '',
-        scriptureApiKey: parsed.scriptureApiKey || import.meta.env.VITE_SCRIPTURE_API_KEY || '',
+        esvApiKey: parsed.esvApiKey || defaults.esvApiKey,
+        scriptureApiKey: parsed.scriptureApiKey || defaults.scriptureApiKey,
       };
     }
   } catch { /* ignore */ }
-  return {
-    esvApiKey: import.meta.env.VITE_ESV_API_KEY || '',
-    scriptureApiKey: import.meta.env.VITE_SCRIPTURE_API_KEY || '',
-  };
+  return defaults;
 }
 
 // Bible IDs on api.bible — update these if needed
@@ -56,7 +56,7 @@ async function fetchESV(bookName: string, chapter: number): Promise<Verse[]> {
     throw new Error('ESV API key not configured. Go to Settings to add your key.');
   }
 
-  const query = `${bookName} ${chapter}`;
+  const query = getBookByName(bookName)?.chapters === 1 ? bookName : `${bookName} ${chapter}`;
   const params = new URLSearchParams({
     q: query,
     'include-headings': 'true',
@@ -88,11 +88,12 @@ function parseEsvPassage(text: string, bookName: string, chapter: number): Verse
   const verses: Verse[] = [];
 
   // Split on verse markers [N] — keep the number as a capture group
-  const parts = text.split(/\[(\d+)\]/);
+  const parts = text.replace(/\r\n?/g, '\n').split(/\[(\d+)\]/);
 
   // Extract headings from preamble (before first verse)
   let pendingHeadings: string[] = [];
   let pendingParagraphBreak = false;
+  let pendingStanzaBreak = false;
 
   if (parts[0]) {
     const preamble = parts[0].trim();
@@ -108,14 +109,13 @@ function parseEsvPassage(text: string, bookName: string, chapter: number): Verse
     const verseNum = parseInt(parts[i], 10);
     let rawText = parts[i + 1] || '';
 
-    // Detect stanza break: text ending with multiple blank lines
-    const stanzaBreak = /\n\s*\n\s*\n/.test(rawText);
+    const heading = pendingHeadings.length > 0 ? pendingHeadings.join('\n') : undefined;
+    const paragraphBreak = pendingParagraphBreak;
+    const stanzaBreak = pendingStanzaBreak;
+    pendingHeadings = [];
 
-    // Detect paragraph break at end (prose: \n\n before next verse)
-    const endsWithParagraphBreak = /\n\n\s*$/.test(rawText);
-
-    // Check for a heading embedded at the end of this verse's text
-    const headingAtEndMatch = rawText.match(/\n\n+((?:[A-Z][^\n]*\n?)+)\s*$/);
+    // Headings after this verse's text belong to the next verse.
+    const headingAtEndMatch = rawText.match(/\n[ \t]*\n([A-Z][^\n]*(?:\n(?:[ \t]*\n)*[A-Z][^\n]*)*)\s*$/);
     if (headingAtEndMatch) {
       const headingBlock = headingAtEndMatch[1].trim();
       const headings = headingBlock
@@ -125,6 +125,9 @@ function parseEsvPassage(text: string, bookName: string, chapter: number): Verse
       rawText = rawText.slice(0, headingAtEndMatch.index);
       pendingHeadings = headings;
     }
+
+    pendingParagraphBreak = /\n[ \t]*\n[ \t]*$/.test(rawText);
+    pendingStanzaBreak = /\n[ \t]*\n[ \t]*\n[ \t]*$/.test(rawText);
 
     // Clean up the verse text while preserving poetry line structure
     const lines = rawText.split('\n');
@@ -137,11 +140,6 @@ function parseEsvPassage(text: string, bookName: string, chapter: number): Verse
     const verseText = cleanedLines.join('\n').trim();
     if (!verseText) continue;
 
-    const heading = pendingHeadings.length > 0 ? pendingHeadings.join('\n') : undefined;
-    const paragraphBreak = pendingParagraphBreak;
-    pendingHeadings = [];
-    pendingParagraphBreak = false;
-
     verses.push({
       book: bookName,
       chapter,
@@ -151,11 +149,6 @@ function parseEsvPassage(text: string, bookName: string, chapter: number): Verse
       ...(stanzaBreak ? { stanzaBreak: true } : {}),
       ...(paragraphBreak && !heading && !stanzaBreak ? { paragraphBreak: true } : {}),
     });
-
-    // Queue paragraph break for next verse if this one ends with \n\n
-    if (endsWithParagraphBreak && !headingAtEndMatch) {
-      pendingParagraphBreak = true;
-    }
   }
 
   return verses;
@@ -208,50 +201,39 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
   // Step 1: Extract section headings and mark their positions
   // Headings use <p class="s">, <p class="s1">, <h1>-<h4>, etc.
   const headingPositions: { pos: number; text: string }[] = [];
-  const headingPattern = /<(?:h[1-4]|p)\b[^>]*class="s\d?"[^>]*>([\s\S]*?)<\/(?:h[1-4]|p)>/gi;
+  const headingPattern = /<(h[1-4]|p)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
   let hm;
   while ((hm = headingPattern.exec(html)) !== null) {
-    headingPositions.push({ pos: hm.index, text: stripHtmlTags(hm[1]).trim() });
-  }
-  // Also match actual h1-h4 tags (without class="s")
-  const hTagPattern = /<(h[1-4])\b[^>]*>([\s\S]*?)<\/\1>/gi;
-  while ((hm = hTagPattern.exec(html)) !== null) {
-    const text = stripHtmlTags(hm[2]).trim();
-    if (text && !headingPositions.some((h) => h.pos === hm!.index)) {
+    const isHeading = hm[1].toLowerCase() !== 'p' || /\bs\d?\b/.test(getHtmlClass(hm[2]));
+    const text = isHeading ? stripHtmlTags(hm[3]).trim() : '';
+    if (text) {
       headingPositions.push({ pos: hm.index, text });
     }
   }
 
   // Step 2: Find all verse markers and their positions
-  const verseMarkers: { pos: number; num: number }[] = [];
-  const markerPattern = /<span[^>]*data-number="(\d+)"[^>]*class="v"[^>]*>\d+<\/span>/gi;
+  const verseMarkers: { start: number; pos: number; num: number }[] = [];
+  const markerPattern = /<span\b([^>]*)>\s*\d+\s*<\/span>/gi;
   let vm;
   while ((vm = markerPattern.exec(html)) !== null) {
-    verseMarkers.push({ pos: vm.index + vm[0].length, num: parseInt(vm[1], 10) });
+    const numberMatch = /(?:^|\s)data-number\s*=\s*["'](\d+)["']/i.exec(vm[1]);
+    if (numberMatch && getHtmlClass(vm[1]).split(/\s+/).includes('v')) {
+      verseMarkers.push({
+        start: vm.index,
+        pos: vm.index + vm[0].length,
+        num: parseInt(numberMatch[1], 10),
+      });
+    }
   }
 
-  // Step 3: Find all paragraph break positions (<p> tags with class "p" or similar)
-  const paragraphBreaks = new Set<number>();
-  const pTagPattern = /<p\b[^>]*class="p"[^>]*>/gi;
-  let pm;
-  while ((pm = pTagPattern.exec(html)) !== null) {
-    paragraphBreaks.add(pm.index);
-  }
-
-  // Step 4: For each verse, extract text from its marker position to the next verse marker
+  // Step 3: Stop verse text before the next marker or section heading.
   for (let i = 0; i < verseMarkers.length; i++) {
     const marker = verseMarkers[i];
     const nextMarker = verseMarkers[i + 1];
     const startPos = marker.pos;
-    const endPos = nextMarker ? nextMarker.pos : html.length;
-
-    // Find the raw HTML for this verse — go back to find the full span end,
-    // then take everything until the next verse span
-    const rawSegment = html.slice(startPos, endPos);
-
-    // Strip the next verse's span tag if it's included
-    const nextSpanIdx = rawSegment.search(/<span[^>]*data-number="/i);
-    const verseHtml = nextSpanIdx >= 0 ? rawSegment.slice(0, nextSpanIdx) : rawSegment;
+    const endPos = nextMarker ? nextMarker.start : html.length;
+    const nextHeading = headingPositions.find((h) => h.pos >= startPos && h.pos < endPos);
+    const verseHtml = html.slice(startPos, nextHeading?.pos ?? endPos);
 
     // The verse marker often sits INSIDE its first paragraph (e.g.
     //   <p class="q"><span class="v">1</span>First line</p><p class="q">Second line</p>
@@ -270,8 +252,7 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
       // is inside this <p>. Capture its class.
       if (closeIdx === -1) {
         const m = /<p\b([^>]*)>/.exec(afterOpen);
-        const classMatch = m && /class="([^"]+)"/i.exec(m[1]);
-        leadingClass = classMatch?.[1] ?? '';
+        leadingClass = m ? getHtmlClass(m[1]) : '';
       }
     }
     // Wrap the orphan leading text (everything before the first </p>) so
@@ -294,9 +275,9 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
     if (!verseText) continue;
 
     // Check for heading before this verse
-    const heading = headingPositions.find(
+    const heading = headingPositions.filter(
       (h) => h.pos < startPos && (i === 0 || h.pos > verseMarkers[i - 1].pos)
-    );
+    ).map((h) => h.text).join('\n');
 
     // Check for paragraph break between previous verse and this one
     let hasParagraphBreak = false;
@@ -311,12 +292,16 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
       chapter,
       verse: marker.num,
       text: verseText,
-      ...(heading ? { heading: heading.text } : {}),
+      ...(heading ? { heading } : {}),
       ...(hasParagraphBreak ? { paragraphBreak: true } : {}),
     });
   }
 
   return verses;
+}
+
+function getHtmlClass(attributes: string): string {
+  return /(?:^|\s)class\s*=\s*(["'])([\s\S]*?)\1/i.exec(attributes)?.[2] ?? '';
 }
 
 /**
@@ -346,8 +331,7 @@ function htmlToVerseText(html: string): string {
     }
     const attrs = m[1];
     const inner = m[2];
-    const classMatch = /class="([^"]+)"/i.exec(attrs);
-    const className = classMatch?.[1] ?? '';
+    const className = getHtmlClass(attrs);
     const text = stripHtmlTags(inner).replace(/[ \t]+/g, ' ').trim();
     if (!text) {
       lastEnd = pRe.lastIndex;
@@ -401,32 +385,24 @@ function stripHtmlTags(html: string): string {
 //   - PUBLIC build (`npm run electron:build:public`): sets
 //     VITE_PUBLIC_BUILD=1, which excludes the JSONs so the published DMG
 //     doesn't redistribute the text. App falls back to live API fetches.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const bundledData: Record<string, any> = {};
+type BundledBible = Record<string, Record<string, Omit<Verse, 'book' | 'chapter'>[]>>;
+const bundledData: Partial<Record<Translation, BundledBible>> = {};
 
-async function loadBundledTranslation(translation: string): Promise<boolean> {
+async function loadBundledTranslation(translation: Translation): Promise<boolean> {
   if (import.meta.env.VITE_PUBLIC_BUILD === '1') return false;
   if (bundledData[translation]) return true;
   try {
-    const modules: Record<string, () => Promise<unknown>> = {
-      ESV: () => import('../data/bible-text-ESV.json').catch(() => null),
-      NASB1995: () => import('../data/bible-text-NASB1995.json').catch(() => null),
-      CSB: () => import('../data/bible-text-CSB.json').catch(() => null),
-      NLT: () => import('../data/bible-text-NLT.json').catch(() => null),
-    };
-    const loader = modules[translation];
+    const modules = import.meta.glob<BundledBible>('../data/bible-text-*.json', { import: 'default' });
+    const loader = modules[`../data/bible-text-${translation}.json`];
     if (!loader) return false;
-    const mod = await loader() as Record<string, unknown> | null;
-    if (!mod) return false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    bundledData[translation] = (mod as any).default || mod;
+    bundledData[translation] = await loader();
     return true;
   } catch {
     return false;
   }
 }
 
-function getBundledChapter(bookName: string, chapter: number, translation: string): Verse[] | null {
+function getBundledChapter(bookName: string, chapter: number, translation: Translation): Verse[] | null {
   const translationData = bundledData[translation];
   if (!translationData) return null;
   const bookData = translationData[bookName];
@@ -434,8 +410,7 @@ function getBundledChapter(bookName: string, chapter: number, translation: strin
   const chapterData = bookData[String(chapter)];
   if (!chapterData || chapterData.length === 0) return null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return chapterData.map((v: any) => ({
+  return chapterData.map((v) => ({
     book: bookName,
     chapter,
     verse: v.verse,
@@ -453,6 +428,13 @@ export async function fetchChapter(
   chapter: number,
   translation: Translation
 ): Promise<Verse[]> {
+  const book = getBookByName(bookName);
+  if (!book) throw new Error(`Unknown book: ${bookName}`);
+  if (!Number.isInteger(chapter) || chapter < 1 || chapter > book.chapters) {
+    throw new Error(`Invalid chapter for ${book.name}: ${chapter}`);
+  }
+  bookName = book.name;
+
   const cacheKey = `${translation}:${bookName}:${chapter}`;
   if (cache.has(cacheKey)) {
     return cache.get(cacheKey)!;
@@ -474,6 +456,10 @@ export async function fetchChapter(
     verses = await fetchFromApiBible(bookName, chapter, translation);
   }
 
+  if (verses.length === 0) {
+    throw new Error(`No verses found for ${bookName} ${chapter} (${translation}).`);
+  }
+
   cache.set(cacheKey, verses);
   return verses;
 }
@@ -485,9 +471,16 @@ export async function fetchVerseRange(
   verseEnd: number | null,
   translation: Translation
 ): Promise<Verse[]> {
-  const allVerses = await fetchChapter(bookName, chapter, translation);
   const end = verseEnd ?? verseStart;
-  return allVerses.filter((v) => v.verse >= verseStart && v.verse <= end);
+  if (!Number.isInteger(verseStart) || !Number.isInteger(end) || verseStart < 1 || end < verseStart) {
+    throw new Error('Please select a valid verse range.');
+  }
+  const allVerses = await fetchChapter(bookName, chapter, translation);
+  const verses = allVerses.filter((v) => v.verse >= verseStart && v.verse <= end);
+  if (verses.length === 0 || end > Math.max(...allVerses.map((v) => v.verse))) {
+    throw new Error('No verses found for that reference or the verse range extends past the chapter.');
+  }
+  return verses;
 }
 
 export function getVerseText(verses: Verse[]): string {

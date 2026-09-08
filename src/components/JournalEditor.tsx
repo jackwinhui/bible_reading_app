@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Trash2, Plus, BookPlus, ChevronUp, ChevronDown, ExternalLink, GripVertical, HeartHandshake } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { JournalEntry, JournalBlock, VerseRef } from '../types';
@@ -23,15 +24,20 @@ export default function JournalEditor({ entry, onClose }: JournalEditorProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerInsertIndex, setPickerInsertIndex] = useState<number | null>(null);
   const [savedAt, setSavedAt] = useState<string>('');
-  const skipFirstSave = useRef(true);
+  const savedDraft = useRef({ title, date, body, prayer, tags });
+  const pendingSave = useRef<(() => void) | null>(null);
 
   // Debounced auto-save
   useEffect(() => {
-    if (skipFirstSave.current) {
-      skipFirstSave.current = false;
+    const saved = savedDraft.current;
+    pendingSave.current = null;
+    if (
+      saved.title === title && saved.date === date && saved.body === body &&
+      saved.prayer === prayer && saved.tags === tags
+    ) {
       return;
     }
-    const t = setTimeout(() => {
+    const save = () => {
       const tagList = tags
         .split(',')
         .map((s) => s.trim())
@@ -43,10 +49,30 @@ export default function JournalEditor({ entry, onClose }: JournalEditorProps) {
         prayer: prayer.trim() ? prayer : undefined,
         tags: tagList.length > 0 ? tagList : undefined,
       });
+      savedDraft.current = { title, date, body, prayer, tags };
+      pendingSave.current = null;
+    };
+    const t = setTimeout(() => {
+      save();
       setSavedAt(new Date().toLocaleTimeString());
     }, 400);
+    pendingSave.current = () => {
+      clearTimeout(t);
+      save();
+    };
     return () => clearTimeout(t);
   }, [title, date, body, prayer, tags, entry.id, updateEntry]);
+
+  useEffect(() => {
+    const savePending = () => pendingSave.current?.();
+    // Browser shutdown must commit the provider's localStorage effect before returning.
+    const handleBeforeUnload = () => flushSync(savePending);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      savePending();
+    };
+  }, []);
 
   const wordCount = useMemo(() => {
     const bodyWords = body.reduce((acc, b) => {
@@ -142,6 +168,7 @@ export default function JournalEditor({ entry, onClose }: JournalEditorProps) {
 
   const handleDelete = () => {
     if (confirm('Delete this entry? This cannot be undone.')) {
+      pendingSave.current = null;
       removeEntry(entry.id);
       onClose?.();
     }

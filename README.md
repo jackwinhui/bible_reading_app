@@ -35,13 +35,16 @@ a regular web app.
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22.12+ (Node.js 24 LTS recommended)
 - API keys (see below)
 
 ### API Keys
 
-This app uses external APIs for Bible text. Keys can be set in `.env` (build
-time) or via the in-app **Settings** page (stored locally per user).
+Public downloads start with empty API-key fields. Enter your own keys in the
+in-app **Settings** page; they are stored locally on your device. Public builds
+ignore `.env` files and never include the developer's build-time API keys.
+
+For personal development builds only, keys can also be supplied in `.env`.
 
 1. **ESV API** (for ESV translation)
    - Sign up at [api.esv.org](https://api.esv.org/)
@@ -51,8 +54,8 @@ time) or via the in-app **Settings** page (stored locally per user).
    - Sign up at [scripture.api.bible](https://scripture.api.bible/)
    - Free to use
 
-Note: ESV, NASB1995, CSB, and NLT text is pre-bundled with the app for
-offline use; the APIs are only used when local data is missing.
+Public downloads fetch Bible text and commentary on demand. Personal builds
+can use local, gitignored Bible and commentary data for offline reading.
 
 ### Setup
 
@@ -74,19 +77,33 @@ npm run dev
 ### Build
 
 ```bash
-# Web build (outputs to dist/)
-npm run build
+# Public web build (safe to distribute; outputs to dist/)
+npm run build:public
 npm run preview
 
-# Desktop build (current platform)
+# Public desktop build (safe to distribute)
+npm run electron:build:public
+
+# Personal web build (may include your .env keys and local Bible text)
+npm run build
+
+# Personal desktop build (do not distribute)
 npm run electron:build
 
-# Desktop build (all platforms — macOS, Windows, Linux)
+# Personal desktop build (all platforms — macOS, Windows, Linux)
 npm run electron:build:all
 ```
 
 Desktop binaries are written to `release/` (gitignored; published as GitHub
 Release assets).
+
+The public build also rejects output containing configured API keys,
+environment files, or bundled Bible/commentary data before packaging.
+
+### Regression tests
+
+Run `npm test` for the Bible API and public-build regression cases. They use Node's built-in
+test runner with mocked responses, so no API keys or network access are needed.
 
 ## Tech Stack
 
@@ -106,7 +123,6 @@ the calendar week.
 ## Versioning
 
 See [`version.md`](./version.md) for the full version history.
-
 
 ## Licence
 

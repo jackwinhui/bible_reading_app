@@ -1,7 +1,7 @@
 {
   "name": "bible-app",
   "private": true,
-  "version": "5.0.3",
+  "version": "5.0.4",
   "description": "A modern Bible reading app with ESV, NASB1995, CSB, and NLT translations",
   "author": "jackwinhui <jackwin@jackwinhui.com>",
   "type": "module",
@@ -9,10 +9,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:public": "VITE_PUBLIC_BUILD=1 tsc -b && VITE_PUBLIC_BUILD=1 vite build",
+    "build:public": "tsc -b && vite build --mode public && node tools/verify-public-build.mjs",
     "fetch:commentary": "node scripts/fetch-enduring-word.mjs",
     "watch:commentary": "node scripts/watch-commentary-progress.mjs",
     "lint": "eslint .",
+    "test": "node --experimental-vm-modules --test tests/*.test.mjs",
     "preview": "vite preview",
     "electron:dev": "VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "electron:build": "npm run build && electron-builder",
@@ -27,19 +28,30 @@
     },
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "LICENSE",
+      "!**/.env*"
     ],
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.reference",
       "icon": "build/icon.icns"
     },
     "win": {
-      "target": ["nsis", "zip"],
+      "target": [
+        "nsis",
+        "zip"
+      ],
       "icon": "build/icon.ico"
     },
     "linux": {
-      "target": ["AppImage", "zip"],
+      "target": [
+        "AppImage",
+        "zip"
+      ],
       "category": "Education",
       "icon": "build/icon.png"
     },

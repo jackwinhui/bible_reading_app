@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Loader2, AlertCircle, BookOpen } from 'lucide-react';
 import { books } from '../data/books';
 import { fetchChapter } from '../services/bibleApi';
@@ -29,6 +29,7 @@ export default function ReadingPage() {
   const [verses, setVerses] = useState<Verse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef<symbol | null>(null);
 
   const [selectedVerse, setSelectedVerse] = useState<{
     verse: number;
@@ -43,21 +44,27 @@ export default function ReadingPage() {
 
   const loadChapter = useCallback(async () => {
     if (!book) return;
+    const id = Symbol();
+    requestId.current = id;
     setLoading(true);
     setError(null);
     try {
       const data = await fetchChapter(decodedName, chapterNum, translation);
-      setVerses(data);
+      if (id === requestId.current) setVerses(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chapter');
+      if (id === requestId.current) {
+        setError(err instanceof Error ? err.message : 'Failed to load chapter');
+      }
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [decodedName, chapterNum, translation, book]);
 
   useEffect(() => {
     loadChapter();
     setSelectedVerse(null);
+    setJournalPopover(null);
+    return () => { requestId.current = null; };
   }, [loadChapter]);
 
   if (!book) {

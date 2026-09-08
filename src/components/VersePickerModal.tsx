@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { books } from '../data/books';
-import { fetchChapter } from '../services/bibleApi';
 import { useTranslation } from '../contexts/TranslationContext';
+import { useVersePreview } from '../hooks/useVersePreview';
 import { parseReference } from '../utils/bookResolver';
 import type { Translation, VerseRef } from '../types';
 
@@ -15,36 +15,39 @@ interface VersePickerModalProps {
 
 export default function VersePickerModal({
   isOpen,
+  ...props
+}: VersePickerModalProps) {
+  const { translation: defaultTr } = useTranslation();
+  if (!isOpen) return null;
+  return (
+    <VersePickerForm
+      key={JSON.stringify([defaultTr, props.initial])}
+      {...props}
+      defaultTr={defaultTr}
+    />
+  );
+}
+
+function VersePickerForm({
   onClose,
   onInsert,
   initial,
-}: VersePickerModalProps) {
-  const { translation: defaultTr } = useTranslation();
-
+  defaultTr,
+}: Omit<VersePickerModalProps, 'isOpen'> & { defaultTr: Translation }) {
   const [translation, setTranslation] = useState<Translation>(defaultTr);
   const [book, setBook] = useState<string>(initial?.book || 'John');
   const [chapter, setChapter] = useState<number>(initial?.chapter || 1);
   const [verseStart, setVerseStart] = useState<number>(initial?.verse || 1);
   const [verseEnd, setVerseEnd] = useState<number | ''>('');
   const [reference, setReference] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
+  const { verses, loading, error } = useVersePreview(
+    book, chapter, verseStart, typeof verseEnd === 'number' ? verseEnd : null, translation
+  );
+  const preview = verses
+    .map((v) => `${v.verse}. ${v.text.replace(/\n+/g, ' ').trim()}`)
+    .join('\n');
 
   const bookData = useMemo(() => books.find((b) => b.name === book), [book]);
-
-  // Reset when opened
-  useEffect(() => {
-    if (!isOpen) return;
-    setTranslation(defaultTr);
-    setBook(initial?.book || 'John');
-    setChapter(initial?.chapter || 1);
-    setVerseStart(initial?.verse || 1);
-    setVerseEnd('');
-    setReference('');
-    setPreview('');
-    setError(null);
-  }, [isOpen, initial, defaultTr]);
 
   const handleReferenceChange = (val: string) => {
     setReference(val);
@@ -57,63 +60,18 @@ export default function VersePickerModal({
     }
   };
 
-  const loadPreview = async () => {
-    setLoading(true);
-    setError(null);
-    setPreview('');
-    try {
-      const all = await fetchChapter(book, chapter, translation);
-      const end = typeof verseEnd === 'number' ? verseEnd : verseStart;
-      const slice = all.filter((v) => v.verse >= verseStart && v.verse <= end);
-      if (slice.length === 0) {
-        setError('No verses found for that reference.');
-      } else {
-        setPreview(slice.map((v) => `${v.verse}. ${v.text.replace(/\n+/g, ' ').trim()}`).join('\n'));
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load passage.');
-    } finally {
-      setLoading(false);
-    }
+  const handleInsert = () => {
+    const snapshot = verses.map((v) => v.text.replace(/\n+/g, ' ').trim()).join(' ');
+    const ref: VerseRef = {
+      book,
+      chapter,
+      verseStart,
+      ...(typeof verseEnd === 'number' && verseEnd > verseStart ? { verseEnd } : {}),
+      translation,
+    };
+    onInsert(ref, snapshot);
+    onClose();
   };
-
-  // Auto-preview on field changes (debounced)
-  useEffect(() => {
-    if (!isOpen) return;
-    const t = setTimeout(loadPreview, 350);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, book, chapter, verseStart, verseEnd, translation]);
-
-  const handleInsert = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const all = await fetchChapter(book, chapter, translation);
-      const end = typeof verseEnd === 'number' ? verseEnd : verseStart;
-      const slice = all.filter((v) => v.verse >= verseStart && v.verse <= end);
-      if (slice.length === 0) {
-        setError('No verses found.');
-        return;
-      }
-      const snapshot = slice.map((v) => v.text.replace(/\n+/g, ' ').trim()).join(' ');
-      const ref: VerseRef = {
-        book,
-        chapter,
-        verseStart,
-        ...(typeof verseEnd === 'number' && verseEnd > verseStart ? { verseEnd } : {}),
-        translation,
-      };
-      onInsert(ref, snapshot);
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to insert.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!isOpen) return null;
 
   return (
     <div

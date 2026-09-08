@@ -41,9 +41,11 @@ async function loadBundled(): Promise<Record<string, BundledBook> | null> {
   if (import.meta.env.VITE_PUBLIC_BUILD === '1') return null;
   if (bundledLoaded) return bundledData;
   try {
-    const mod = await import('../data/commentary-enduring-word.json').catch(() => null);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    bundledData = mod ? ((mod as any).default || mod) : null;
+    const modules = import.meta.glob<Record<string, BundledBook>>(
+      '../data/commentary-enduring-word.json', { import: 'default' }
+    );
+    const loader = modules['../data/commentary-enduring-word.json'];
+    bundledData = loader ? await loader() : null;
   } catch {
     bundledData = null;
   }

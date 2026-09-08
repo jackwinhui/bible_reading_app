@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Brain,
   Eye,
@@ -86,6 +86,7 @@ export default function MemoryVersePage() {
   const [verseText, setVerseText] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef<symbol | null>(null);
   const [stage, setStage] = useState<Stage>('study');
   const [typedText, setTypedText] = useState('');
   const [result, setResult] = useState<ComparisonResult | null>(null);
@@ -99,6 +100,8 @@ export default function MemoryVersePage() {
   const translationForActive = active.translation ?? userTranslation;
 
   const loadVerse = useCallback(async () => {
+    const id = Symbol();
+    requestId.current = id;
     setLoading(true);
     setError(null);
     try {
@@ -109,11 +112,13 @@ export default function MemoryVersePage() {
         active.verseEnd,
         translationForActive
       );
-      setVerseText(getVerseText(verses));
+      if (id === requestId.current) setVerseText(getVerseText(verses));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load verse');
+      if (id === requestId.current) {
+        setError(err instanceof Error ? err.message : 'Failed to load verse');
+      }
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [active, translationForActive]);
 
@@ -128,6 +133,7 @@ export default function MemoryVersePage() {
     } else {
       setBestScore(getProgressForCustomVerse(active.customId!)?.bestScore);
     }
+    return () => { requestId.current = null; };
   }, [loadVerse, active]);
 
   const handleCheck = () => {
