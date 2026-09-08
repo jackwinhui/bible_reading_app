@@ -100,6 +100,11 @@ Release assets).
 The public build also rejects output containing configured API keys,
 environment files, or bundled Bible/commentary data before packaging.
 
+Pushing a stable `vX.Y.Z` tag publishes the public macOS Apple Silicon installers
+through `.github/workflows/release.yml`. The workflow builds the tagged source,
+runs the release guards, and uploads all assets before making the release public.
+It can also be run manually with an existing release tag.
+
 ### Regression tests
 
 Run `npm test` for the Bible API and public-build regression cases. They use Node's built-in

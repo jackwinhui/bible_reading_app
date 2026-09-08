@@ -1,0 +1,170 @@
+name: Publish public release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+    # Also publish a prepared tag that predates this workflow, without moving it.
+    paths:
+      - .github/workflows/release.yml
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag (vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish:
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      VITE_PUBLIC_BUILD: '1'
+      VITE_ESV_API_KEY: PUBLIC_RELEASE_ESV_SENTINEL_NOT_A_REAL_KEY
+      VITE_SCRIPTURE_API_KEY: PUBLIC_RELEASE_SCRIPTURE_SENTINEL_NOT_A_REAL_KEY
+    steps:
+      - name: Check out release references
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+
+      - name: Select the immutable release tag
+        id: release_tag
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          tag="$REQUESTED_TAG"
+          if [[ -z "$tag" ]]; then
+            if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+              tag="$GITHUB_REF_NAME"
+            else
+              tag="v$(node -p 'require("./package.json").version')"
+            fi
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a stable vX.Y.Z release tag."
+            exit 1
+          fi
+          git rev-parse --verify "refs/tags/$tag^{commit}" > /dev/null
+          git checkout --detach "refs/tags/$tag"
+          test "v$(node -p 'require("./package.json").version')" = "$tag"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Look up the release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          const response = await fetch(
+            `${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}/releases/tags/${encodeURIComponent(process.env.RELEASE_TAG)}`,
+            { headers: {
+              Authorization: `Bearer ${process.env.GH_TOKEN}`,
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+            } }
+          );
+          let state;
+          if (response.status === 404) {
+            state = 'missing';
+          } else {
+            if (!response.ok) throw new Error(`Release lookup failed: HTTP ${response.status}`);
+            state = (await response.json()).draft ? 'draft' : 'published';
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `state=${state}\n`);
+          NODE
+
+      - name: Install locked dependencies
+        if: steps.release.outputs.state != 'published'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run release regressions
+        if: steps.release.outputs.state != 'published'
+        run: npm test
+
+      - name: Build key-free macOS installers
+        if: steps.release.outputs.state != 'published'
+        run: |
+          npm run electron:build:public -- --mac --arm64 --publish never \
+            '--config.artifactName=Bible-App-${version}-${os}-${arch}.${ext}' \
+            --config.publish.provider=github \
+            --config.publish.owner="$GITHUB_REPOSITORY_OWNER" \
+            --config.publish.repo="${GITHUB_REPOSITORY#*/}"
+
+      - name: Inspect the packaged app and prepare release notes
+        if: steps.release.outputs.state != 'published'
+        env:
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { extractFile, listPackage } from '@electron/asar';
+          const archive = 'release/mac-arm64/Bible App.app/Contents/Resources/app.asar';
+          const contents = readFileSync(archive);
+          for (const name of ['VITE_ESV_API_KEY', 'VITE_SCRIPTURE_API_KEY']) {
+            assert.ok(process.env[name], 'A key-leak sentinel is required');
+            assert.ok(!contents.includes(process.env[name]), 'A build-time API key entered the app archive');
+          }
+          for (const name of listPackage(archive)) {
+            assert.ok(!/(?:^|\/)\.env|bible-text-|commentary-enduring-word|\/Local Storage\/|\/IndexedDB\//i.test(name),
+              `Private data entered the app archive: ${name}`);
+          }
+          const manifest = JSON.parse(extractFile(archive, 'package.json').toString());
+          assert.equal(`v${manifest.version}`, process.env.RELEASE_TAG);
+          const history = readFileSync('version.md', 'utf8');
+          const notes = history.split(`## ${process.env.RELEASE_TAG}\n`)[1]?.split(/\n## /)[0]?.trim();
+          assert.ok(notes, 'Release notes must exist for the selected tag');
+          writeFileSync('release/release-notes.md',
+            `${notes}\n\nmacOS (Apple Silicon / arm64). Enter your own API keys in Settings.\n\nThis build is ad-hoc signed and not notarized.\n`);
+          NODE
+          cd release
+          shasum -a 256 Bible-App-*.dmg Bible-App-*.zip *.blockmap latest-mac.yml > SHA256SUMS
+          shasum -a 256 -c SHA256SUMS
+
+      - name: Create a draft release
+        if: steps.release.outputs.state == 'missing'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --draft \
+            --title "$RELEASE_TAG" --notes-file release/release-notes.md
+
+      - name: Upload all assets before publishing
+        if: steps.release.outputs.state != 'published'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" --clobber \
+            release/Bible-App-*.dmg release/Bible-App-*.zip release/*.blockmap \
+            release/latest-mac.yml release/SHA256SUMS
+          gh release edit "$RELEASE_TAG" --draft=false --latest \
+            --title "$RELEASE_TAG" --notes-file release/release-notes.md
