@@ -115,6 +115,43 @@ test('API.Bible excludes the next marker when consecutive verses use different a
   assert.deepEqual(Array.from(verses, (v) => v.verse), [1, 2]);
 });
 
+test('API.Bible removes a mid-verse heading without truncating the verse continuation', async () => {
+  const api = await loadApi(async () => response({
+    data: {
+      content: '<p class="p"><span data-number="1" class="v">1</span>First part of the verse.</p>'
+        + '<h3>Next Section</h3><p class="s2">Subtitle</p><p class="p">Second part of the same verse. '
+        + '<span data-number="2" class="v">2</span>The following verse.</p>',
+    },
+  }));
+  const verses = await api.fetchChapter('Genesis', 1, 'NASB1995');
+  assert.equal(verses[0].text, 'First part of the verse. Second part of the same verse.');
+  assert.equal(verses[1].heading, 'Next Section\nSubtitle');
+  assert.equal(verses[1].text, 'The following verse.');
+});
+
+test('API.Bible preserves poetry after a heading inside the final verse', async () => {
+  const api = await loadApi(async () => response({
+    data: {
+      content: '<p class="q1"><span data-number="1" class="v">1</span>First poetic line.</p>'
+        + '<h3>Section Heading</h3><p class="q2">Indented continuation.</p>',
+    },
+  }));
+  const verses = await api.fetchChapter('Psalms', 1, 'CSB');
+  assert.equal(verses[0].text, 'First poetic line.\n        Indented continuation.');
+});
+
+test('removing a heading does not join words in an unwrapped verse', async () => {
+  const api = await loadApi(async () => response({
+    data: {
+      content: '<span class="v" data-number="1">1</span>First part'
+        + '<h3>Section Heading</h3>continues here.'
+        + '<span class="v" data-number="2">2</span>Next verse.',
+    },
+  }));
+  const verses = await api.fetchChapter('Genesis', 1, 'NLT');
+  assert.equal(verses[0].text, 'First part continues here.');
+});
+
 test('ESV requests the whole book for single-chapter books', async () => {
   const queries = [];
   const api = await loadApi(async (url) => {

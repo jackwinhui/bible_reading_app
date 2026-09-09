@@ -200,14 +200,14 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
 
   // Step 1: Extract section headings and mark their positions
   // Headings use <p class="s">, <p class="s1">, <h1>-<h4>, etc.
-  const headingPositions: { pos: number; text: string }[] = [];
+  const headingPositions: { pos: number; end: number; text: string }[] = [];
   const headingPattern = /<(h[1-4]|p)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
   let hm;
   while ((hm = headingPattern.exec(html)) !== null) {
     const isHeading = hm[1].toLowerCase() !== 'p' || /\bs\d?\b/.test(getHtmlClass(hm[2]));
     const text = isHeading ? stripHtmlTags(hm[3]).trim() : '';
     if (text) {
-      headingPositions.push({ pos: hm.index, text });
+      headingPositions.push({ pos: hm.index, end: headingPattern.lastIndex, text });
     }
   }
 
@@ -226,14 +226,20 @@ function parseApiBibleHtml(html: string, bookName: string, chapter: number): Ver
     }
   }
 
-  // Step 3: Stop verse text before the next marker or section heading.
+  // A heading can split a verse, so remove its element without discarding the continuation.
   for (let i = 0; i < verseMarkers.length; i++) {
     const marker = verseMarkers[i];
     const nextMarker = verseMarkers[i + 1];
     const startPos = marker.pos;
     const endPos = nextMarker ? nextMarker.start : html.length;
-    const nextHeading = headingPositions.find((h) => h.pos >= startPos && h.pos < endPos);
-    const verseHtml = html.slice(startPos, nextHeading?.pos ?? endPos);
+    let verseHtml = '';
+    let cursor = startPos;
+    for (const heading of headingPositions) {
+      if (heading.pos < startPos || heading.pos >= endPos) continue;
+      verseHtml += html.slice(cursor, heading.pos) + ' ';
+      cursor = heading.end;
+    }
+    verseHtml += html.slice(cursor, endPos);
 
     // The verse marker often sits INSIDE its first paragraph (e.g.
     //   <p class="q"><span class="v">1</span>First line</p><p class="q">Second line</p>

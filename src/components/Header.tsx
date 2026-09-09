@@ -1,12 +1,22 @@
+import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Book, Bookmark, StickyNote, Brain, Settings, NotebookPen } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import { useTranslation } from '../contexts/TranslationContext';
 import type { Translation } from '../types';
+import { version } from '../../package.json';
+
+const buildType = import.meta.env.DEV
+  ? 'Development'
+  : import.meta.env.VITE_PUBLIC_BUILD === '1' ? 'Public' : 'Personal';
 
 export default function Header() {
   const location = useLocation();
   const { translation, setTranslation } = useTranslation();
+
+  useEffect(() => {
+    document.title = `Bible App v${version} (${buildType})`;
+  }, []);
 
   // Track the last reading location so the Read tab returns to it
   const lastReadPath = (() => {
@@ -31,8 +41,13 @@ export default function Header() {
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 no-underline">
           <Book className="w-6 h-6 text-primary-600 dark:text-primary-400" />
-          <span className="font-semibold text-lg text-surface-900 dark:text-surface-50">
-            Bible App
+          <span className="flex flex-col leading-tight">
+            <span className="font-semibold text-lg text-surface-900 dark:text-surface-50">
+              Bible App
+            </span>
+            <span aria-label="App version" className="text-[11px] font-medium text-surface-500 dark:text-surface-400">
+              v{version} - {buildType}
+            </span>
           </span>
         </Link>
 

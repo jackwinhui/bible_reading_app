@@ -1,5 +1,24 @@
 # Bible App — Version History
 
+## v5.0.6
+
+### Improvements
+- Show the package version and Personal/Public/Development build type beneath the app name and in the window title, so older running copies can be identified immediately.
+
+### Bug Fixes
+- Keep API.Bible section headings out of verse text without dropping verse continuations or joining words when a heading appears mid-verse.
+- Include the offline-data repair from the personal v5.0.5 build: recognized legacy NASB1995, CSB, and NLT bundles can be repaired locally with backups and without API requests.
+
+### Public Downloads
+- Public installers continue to start with empty API-key fields and exclude developer keys and private Bible/commentary JSONs. The corrected offline data remains in personal builds only.
+
+## v5.0.5
+
+### Bug Fixes
+- Repair section headings copied into legacy NASB1995, CSB, and NLT offline verse text, including the heading appended to Ephesians 6:9. Keep the section heading above the following verse instead of repeating it in the body.
+- Preserve verse continuations when an API.Bible section heading appears in the middle of a verse.
+- Add an offline, fingerprint-guarded repair tool with backups; no Bible API calls are required.
+
 ## v5.0.4
 
 ### Privacy

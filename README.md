@@ -110,6 +110,14 @@ It can also be run manually with an existing release tag.
 Run `npm test` for the Bible API and public-build regression cases. They use Node's built-in
 test runner with mocked responses, so no API keys or network access are needed.
 
+### Repairing legacy offline data
+
+Older API.Bible JSON exports copied section headings into verse text. Run
+`npm run repair:bundled-headings` to preview the repair, then add `-- --write`
+to apply it. The tool only rewrites recognized legacy files, preserves verse
+continuations and heading metadata, and backs up the originals under the
+gitignored `release/data-backups/` directory. It makes no API requests.
+
 ## Tech Stack
 
 - **React 19** + TypeScript (Vite)
